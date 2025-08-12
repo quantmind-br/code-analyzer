@@ -4,101 +4,110 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Code Analyzer is a Rust CLI tool that analyzes codebases to identify refactoring candidates using AST parsing with tree-sitter. It supports multiple languages (Rust, JavaScript, Python, Java, C, C++, Go, TypeScript) and provides both terminal table output and JSON export for CI/CD integration.
+Code Analyzer is a CLI tool written in Rust for analyzing codebases to identify refactoring candidates using AST parsing. It supports multiple languages (Rust, JavaScript, Python, Java, C, C++, Go, TypeScript) and provides both terminal and JSON output for CI/CD integration.
 
-## Essential Commands
+## Development Commands
 
-### Development Workflow
+### Building & Testing
 ```bash
-# Build and check
-cargo check                    # Quick syntax/type checking
-cargo build                    # Debug build
-cargo build --release         # Optimized release build
+# Development build
+cargo build
 
-# Code quality (run in this order after changes)
-cargo fmt                      # Format code
-cargo clippy                   # Lint with clippy
-cargo clippy -- -D warnings   # Lint with no warnings allowed (CI standard)
+# Release build (optimized with LTO)
+cargo build --release
 
-# Testing
-cargo test                                  # Run all tests
-cargo test --test integration_tests        # Run integration tests only
-cargo test -- --nocapture                  # Show output from tests
-cargo test test_name                        # Run specific test
+# Run all tests (unit + integration)
+cargo test
 
-# Local installation for testing
-cargo install --path .
+# Run integration tests only
+cargo test --test integration_tests
+
+# Fast syntax check during development
+cargo check
 ```
 
-### Usage Examples
+### Code Quality (Always run before committing)
+```bash
+# Full quality check - ALL must pass before committing
+cargo fmt --check && cargo clippy -- -D warnings && cargo test
+
+# Individual checks:
+cargo fmt          # Format code
+cargo fmt --check  # Check formatting
+cargo clippy       # Linting
+cargo clippy -- -D warnings  # Strict linting for CI
+```
+
+### Running the Tool
 ```bash
 # Basic analysis
 cargo run
-cargo run -- --help
-cargo run -- path/to/analyze --verbose
 
-# With filters and options
-cargo run -- --min-lines 100 --languages rust,python --sort complexity
-cargo run -- --output json --limit 20
+# With options
+cargo run -- --min-lines 100 --sort complexity --output json
+
+# Using installed binary
+cargo install --path .
+code-analyzer --help
 ```
 
-## Architecture Overview
+## Architecture
 
-The codebase follows a modular architecture with clear separation of concerns:
+### Module Structure
+- **src/lib.rs** - Main library API and analysis orchestration
+- **src/analyzer/** - Core analysis engine using tree-sitter
+  - `mod.rs` - AnalyzerEngine and AnalysisStats
+  - `language.rs` - Language detection and file extensions
+  - `parser.rs` - AST parsing with tree-sitter grammars
+  - `walker.rs` - File system traversal with gitignore support
+- **src/output/** - Dual output system (terminal + JSON)
+  - `terminal.rs` - Pretty table formatting
+  - `json.rs` - JSON serialization for CI/CD
+- **src/cli.rs** - Command-line interface using clap derive API
+- **src/error.rs** - Centralized error handling with AnalyzerError enum
 
-### Core Components
+### Key Dependencies
+- **tree-sitter** + language grammars for AST parsing
+- **rayon** for parallel file processing
+- **clap** for CLI argument parsing
+- **prettytable-rs** for terminal output
+- **ignore** crate for gitignore support
 
-**`src/lib.rs`** - Main orchestration layer that coordinates the entire analysis workflow:
-1. Validates CLI arguments
-2. Creates and configures AnalyzerEngine
-3. Runs analysis on target directory
-4. Generates output in requested format(s)
+## Development Guidelines
 
-**`src/analyzer/`** - Analysis engine with three key modules:
-- `language.rs` - Language detection and management (SupportedLanguage enum, LanguageManager)
-- `parser.rs` - AST parsing using tree-sitter parsers (FileParser, AnalysisReport, ProjectSummary)
-- `walker.rs` - File system traversal with gitignore support (FileWalker, FilterConfig)
+### Testing Strategy
+- Integration tests in `tests/integration_tests.rs` test CLI functionality end-to-end
+- Unit tests embedded in modules test individual components
+- Use `tempfile` for creating test projects
+- Test with sample files in `test_mixed_languages/` directory
 
-**`src/output/`** - Dual output system:
-- `terminal.rs` - Pretty table formatting using prettytable-rs
-- `json.rs` - Structured JSON export for CI/CD integration
-- `mod.rs` - OutputManager that coordinates both outputs
+### Error Handling
+- Use `AnalyzerError` enum for all errors
+- Implement `From` traits for automatic error conversion
+- Return `Result<T>` for fallible operations
 
-**`src/cli.rs`** - CLI interface using clap derive API with comprehensive filtering options
+### Performance Considerations
+- File analysis runs in parallel using rayon
+- Use `--release` builds for performance testing
+- Tree-sitter parsing is the main performance bottleneck
 
-**`src/error.rs`** - Custom error types and error handling utilities
+### Windows Compatibility
+- Paths use Windows separators (`\`) on Windows
+- CLI testing works with Windows command prompt
+- Git operations standard across platforms
 
-### Key Design Patterns
+## Task Completion Checklist
 
-**AnalyzerEngine** - Central orchestrator that composes language manager, file parser, and file walker components. Created either with defaults or from CLI arguments.
+Before committing any changes, ensure:
+1. ✅ `cargo fmt --check` passes
+2. ✅ `cargo clippy -- -D warnings` passes  
+3. ✅ `cargo test` passes (all tests)
+4. ✅ `cargo build --release` succeeds
 
-**Language Management** - Extensible language support through SupportedLanguage enum and tree-sitter grammar integration. Defaults to stable languages (Rust, Python, JavaScript, TypeScript) rather than all supported.
+## Language Support
 
-**Parallel Processing** - Uses `rayon` for CPU-intensive file processing with `indicatif` progress reporting.
-
-**Dual Output Strategy** - Generates both human-readable terminal tables and machine-readable JSON simultaneously for different use cases.
-
-## Testing Strategy
-
-**Integration Tests** (`tests/integration_tests.rs`):
-- Creates temporary test projects with multi-language source files
-- Tests complete analysis workflow from CLI args to output
-- Uses `tempfile` for isolated test environments
-- Tests both API functions and CLI command execution
-
-**Test File Structure**:
-- Creates realistic test projects with Rust, Python, JavaScript files
-- Includes complex scenarios (nested functions, classes, modules)
-- Tests filtering, sorting, and output format options
-
-## Project Requirements Prompts (PRPs)
-
-The `PRPs/` directory contains Product Requirement Prompts - structured prompts for AI-driven development that combine traditional PRD scope with AI-specific context, implementation details, and validation gates. This approach ensures focused, deliverable software increments with proper context for code generation.
-
-## Development Notes
-
-- **Tree-sitter Integration**: Language parsers are loaded dynamically; add new languages by extending SupportedLanguage enum and adding corresponding tree-sitter grammar
-- **Performance**: Uses parallel processing for file analysis; progress reporting available with `--verbose` flag
-- **Error Handling**: Comprehensive error types in `error.rs`; analysis continues on individual file failures
-- **Output Flexibility**: Support for terminal tables, JSON export, or both simultaneously
-- **File Filtering**: Respects .gitignore rules plus additional exclude patterns and file size limits
+Adding new language support requires:
+1. Add tree-sitter grammar dependency to Cargo.toml
+2. Update language detection in `src/analyzer/language.rs`
+3. Add file extension mappings
+4. Test with sample files

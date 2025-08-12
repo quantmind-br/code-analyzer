@@ -246,7 +246,7 @@ pub fn merge_analysis_reports(reports: &[AnalysisReport]) -> Result<AnalysisRepo
 mod tests {
     use super::*;
     use chrono::Utc;
-    use std::collections::HashMap;
+
     use std::path::PathBuf;
     use tempfile::NamedTempFile;
 

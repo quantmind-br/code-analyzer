@@ -287,7 +287,6 @@ pub fn validate_language_list(languages: &[String]) -> Result<Vec<SupportedLangu
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::path::PathBuf;
 
     #[test]
     fn test_language_detection() {

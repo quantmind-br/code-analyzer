@@ -1,27 +1,29 @@
-# Task Completion Workflow
+# Task Completion Workflow - Code Analyzer
 
-## When a Task is Completed
+## When Task is Completed - Required Checks
 
-After implementing any code changes, follow this checklist:
+### 1. Code Quality Verification
+Always run these commands after making changes:
 
-### 1. Code Quality Checks
-```cmd
-# Format the code
-cargo fmt
+```bash
+# Format check
+cargo fmt --check
 
-# Run clippy for linting
-cargo clippy
-
-# Check clippy with no warnings allowed (CI standard)
+# Linting with strict warnings
 cargo clippy -- -D warnings
+
+# All tests must pass
+cargo test
 ```
 
-### 2. Testing
-```cmd
-# Run all tests
+### 2. Integration Testing
+Run the full test suite including integration tests:
+
+```bash
+# Run all tests including integration
 cargo test
 
-# Run integration tests specifically
+# Specifically test CLI integration
 cargo test --test integration_tests
 
 # Test with verbose output if needed
@@ -29,39 +31,54 @@ cargo test -- --nocapture
 ```
 
 ### 3. Build Verification
-```cmd
-# Debug build
-cargo check
+Ensure the project builds in both modes:
 
-# Release build to ensure optimization compatibility
+```bash
+# Debug build
+cargo build
+
+# Release build (catches optimization issues)
 cargo build --release
 ```
 
-### 4. Documentation
-```cmd
-# Generate and check documentation
+### 4. Documentation Updates
+If public APIs changed:
+
+```bash
+# Generate documentation
 cargo doc
 
-# Verify no documentation warnings
-cargo doc --no-deps
+# Check for documentation warnings
+cargo doc --open
 ```
 
-### 5. Final Validation
-- Ensure all tests pass
-- No compiler warnings
-- No clippy warnings
-- Code is properly formatted
-- Documentation is complete and accurate
+## Development Workflow
 
-## Pre-commit Standards
-- All code must be formatted with `cargo fmt`
-- All clippy warnings must be resolved
-- All tests must pass
-- No compiler warnings allowed in release build
+### Before Starting Work
+1. `git status` - Check current state
+2. `cargo test` - Ensure tests pass
+3. `git pull origin main` - Get latest changes
 
-## CI/CD Readiness
-The project follows Rust best practices for CI/CD:
-- Formatted code (`cargo fmt --check`)
-- Linted code (`cargo clippy -- -D warnings`)
-- Passing tests (`cargo test`)
-- Successful release build (`cargo build --release`)
+### During Development
+1. `cargo check` - Fast syntax validation
+2. `cargo test --lib` - Quick library tests
+3. `cargo clippy` - Regular linting checks
+
+### Before Committing
+1. **MUST RUN**: `cargo fmt --check && cargo clippy -- -D warnings && cargo test`
+2. If all pass, then commit
+3. Never commit if any of these fail
+
+## Common Issues & Solutions
+
+### Tree-sitter Language Parsing
+- If new language support added, ensure grammar dependencies are in Cargo.toml
+- Test with sample files in `test_mixed_languages/`
+
+### Performance Testing
+- Use `--release` build for performance testing
+- Test with large codebases using `cargo run --release`
+
+### Windows Compatibility
+- Ensure path handling works with Windows paths (`\` vs `/`)
+- Test CLI commands with Windows command prompt

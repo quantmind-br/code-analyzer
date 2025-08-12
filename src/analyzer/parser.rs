@@ -350,16 +350,6 @@ pub fn create_project_summary(files: &[FileAnalysis]) -> ProjectSummary {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::io::Write;
-    use tempfile::NamedTempFile;
-
-    fn create_test_file(content: &str, extension: &str) -> NamedTempFile {
-        let mut file = NamedTempFile::new().unwrap();
-        // Rename to have the right extension
-        let path = file.path().with_extension(extension);
-        fs::write(&path, content).unwrap();
-        file
-    }
 
     #[test]
     fn test_line_counting() {

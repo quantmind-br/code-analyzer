@@ -374,8 +374,8 @@ mod tests {
 
         // Test without hidden files (default)
         let walker = FileWalker::new(language_manager);
-        let (files, _) = walker.discover_files(test_dir.path()).unwrap();
-        assert!(!files
+        let (_files, _) = walker.discover_files(test_dir.path()).unwrap();
+        assert!(!_files
             .iter()
             .any(|p| p.file_name().unwrap().to_string_lossy().starts_with('.')));
 
@@ -386,7 +386,7 @@ mod tests {
         };
         let language_manager = LanguageManager::new();
         let walker = FileWalker::with_config(language_manager, config);
-        let (files, _) = walker.discover_files(test_dir.path()).unwrap();
+        let (_files, _) = walker.discover_files(test_dir.path()).unwrap();
 
         // Note: .hidden file might not be included if it's not a supported language
         // This test mainly verifies the configuration is applied
@@ -403,10 +403,10 @@ mod tests {
         };
 
         let walker = FileWalker::with_config(language_manager, config);
-        let (files, _) = walker.discover_files(test_dir.path()).unwrap();
+        let (_files, _) = walker.discover_files(test_dir.path()).unwrap();
 
         // Should only find Rust files
-        for file in files {
+        for file in _files {
             assert_eq!(file.extension().unwrap(), "rs");
         }
     }

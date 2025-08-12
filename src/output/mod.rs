@@ -283,7 +283,7 @@ pub fn route_output_by_format(
 mod tests {
     use super::*;
     use chrono::Utc;
-    use std::collections::HashMap;
+
     use std::path::PathBuf;
     use tempfile::NamedTempFile;
 

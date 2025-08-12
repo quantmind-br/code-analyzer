@@ -1,43 +1,53 @@
-# Code Structure
+# Code Structure & Architecture - Code Analyzer
 
 ## Project Layout
-
 ```
-code-analyzer/
-├── src/
-│   ├── main.rs           # Entry point, CLI argument parsing
-│   ├── lib.rs            # Main analysis logic and coordination 
-│   ├── cli.rs            # CLI argument definitions and types
-│   ├── error.rs          # Error handling and custom error types
-│   ├── analyzer/         # AST analysis modules
-│   └── output/           # Output formatting modules
-├── tests/
-│   └── integration_tests.rs  # Integration tests
-├── PRPs/                 # Project Requirements and Planning
-│   ├── ai_docs/         # AI-generated documentation
-│   ├── scripts/         # Helper scripts (e.g., prp_runner.py)
-│   └── templates/       # Document templates
-├── target/              # Rust build artifacts
-├── Cargo.toml           # Rust package configuration
-├── Cargo.lock           # Dependency lock file
-├── PLAN.md              # Project overview in Portuguese
-├── refactor-candidates.json  # Example output
-└── test-results.json    # Test analysis results
+src/
+├── main.rs                 # Entry point - minimal, delegates to lib
+├── lib.rs                  # Main library with public API and analysis orchestration
+├── cli.rs                  # CLI argument parsing and configuration
+├── error.rs                # Centralized error handling with AnalyzerError enum
+├── analyzer/               # Core analysis engine
+│   ├── mod.rs             # AnalyzerEngine and AnalysisStats structs
+│   ├── language.rs        # Language detection and extensions mapping
+│   ├── parser.rs          # AST parsing with tree-sitter integration
+│   └── walker.rs          # File system traversal with gitignore support
+└── output/                 # Output formatting and generation
+    ├── mod.rs             # OutputManager and routing logic
+    ├── terminal.rs        # Pretty table formatting for console
+    └── json.rs            # JSON serialization for exports
+
+tests/
+├── integration_tests.rs   # End-to-end CLI testing
+└── integration/           # Additional integration test modules
+    └── language_detection_test.rs
 ```
 
-## Module Structure
+## Key Architecture Components
 
-- **main.rs**: Simple entry point that parses CLI args and delegates to lib
-- **cli.rs**: Comprehensive CLI argument definitions using clap derive API
-- **lib.rs**: Core analysis orchestration, file discovery, and result aggregation
-- **error.rs**: Custom error types and error handling utilities
-- **analyzer/**: AST parsing and metric calculation modules (per language)
-- **output/**: Terminal table and JSON output formatting
+### AnalyzerEngine (src/analyzer/mod.rs)
+- Central orchestrator for code analysis
+- Manages language detection, parsing, and metrics collection
+- Contains AnalysisStats for aggregating results
 
-## Key Features in Code
+### CLI Layer (src/cli.rs)
+- Uses clap derive API for argument parsing
+- Defines CliArgs struct with validation
+- Enums: SortBy, OutputFormat for type safety
 
-- Uses `tree-sitter` for accurate AST-based analysis
-- Parallel processing with `rayon` for performance
-- Progress reporting during analysis
-- Comprehensive filtering and sorting options
-- Multiple output formats (table, JSON)
+### Error Handling (src/error.rs)
+- AnalyzerError enum with specific error types
+- Implements From traits for automatic conversion
+- Provides Result<T> type alias
+
+### Output System (src/output/)
+- Dual output: terminal tables + JSON export
+- OutputManager routes based on format selection
+- Extensible design for adding new output formats
+
+## Module Dependencies
+- lib.rs → orchestrates all modules
+- analyzer/ → independent analysis engine
+- output/ → depends on analyzer results
+- cli.rs → standalone argument parsing
+- main.rs → minimal, uses lib.rs API

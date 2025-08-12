@@ -1,109 +1,88 @@
-# Suggested Commands for Development
+# Suggested Commands - Code Analyzer
 
-## Build and Run Commands
+## Development Commands
 
-### Development Build
-```cmd
+### Building & Installation
+```bash
+# Development build
 cargo build
-```
 
-### Release Build (Optimized)
-```cmd
+# Release build (optimized)
 cargo build --release
-```
 
-### Run in Development
-```cmd
-cargo run
-cargo run -- --help
-cargo run -- path/to/analyze --verbose
-```
-
-### Install Locally for Testing
-```cmd
+# Install locally from source
 cargo install --path .
 ```
 
-## Testing Commands
-
-### Run All Tests
-```cmd
+### Testing
+```bash
+# Run all tests
 cargo test
-```
 
-### Run Integration Tests
-```cmd
+# Run integration tests only
 cargo test --test integration_tests
-```
 
-### Test with Verbose Output
-```cmd
+# Run with verbose output
 cargo test -- --nocapture
+
+# Run specific test module
+cargo test --test integration_tests -- language_detection
 ```
 
-## Code Quality Commands
-
-### Format Code
-```cmd
+### Code Quality
+```bash
+# Format code
 cargo fmt
-```
 
-### Check Formatting (CI)
-```cmd
+# Check formatting without making changes
 cargo fmt --check
-```
 
-### Lint with Clippy
-```cmd
+# Run clippy linter
 cargo clippy
-```
 
-### Clippy for CI (Fail on Warnings)
-```cmd
+# Clippy with all warnings as errors (CI mode)
 cargo clippy -- -D warnings
+
+# Full quality check (suitable for CI)
+cargo fmt --check && cargo clippy -- -D warnings && cargo test
 ```
 
-### Check Without Building
-```cmd
-cargo check
+### Running the Tool
+```bash
+# Basic analysis of current directory
+cargo run
+
+# Analyze specific directory
+cargo run /path/to/project
+
+# With filters and options
+cargo run -- --min-lines 100 --sort complexity --output json
+
+# Using installed binary
+code-analyzer --help
+code-analyzer --min-functions 5 --languages rust,python
 ```
 
-## Analysis and Documentation
+## Windows-Specific Commands
 
-### Generate Documentation
-```cmd
-cargo doc
-cargo doc --open
-```
-
-### Security Audit
-```cmd
-cargo audit
-```
-
-## Windows-Specific Utilities
-
-### List Directory Contents
-```cmd
-dir
-```
-
-### Find Files
-```cmd
-where filename
-findstr /s "pattern" *.rs
-```
-
-### Environment Variables
-```cmd
-echo %PATH%
-set RUST_LOG=debug
-```
+### System Commands
+- `dir` - List directory contents (instead of `ls`)
+- `type file.txt` - Display file contents (instead of `cat`)
+- `findstr "pattern" *.rs` - Search in files (instead of `grep`)
+- `where code-analyzer` - Find executable location (instead of `which`)
 
 ### Git Operations
-```cmd
+```bash
 git status
 git add .
 git commit -m "message"
-git log --oneline
+git push origin main
+```
+
+## Cargo Shortcuts
+```bash
+# Quick development cycle
+cargo check          # Fast syntax check
+cargo test --lib      # Test library code only
+cargo doc --open      # Generate and open documentation
 ```

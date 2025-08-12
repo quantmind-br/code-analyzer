@@ -336,7 +336,10 @@ mod tests {
 
         let result = analyze_directory(test_dir.path());
         if result.is_err() {
-            eprintln!("Analysis failed with error: {:?}", result.as_ref().unwrap_err());
+            eprintln!(
+                "Analysis failed with error: {:?}",
+                result.as_ref().unwrap_err()
+            );
         }
         assert!(result.is_ok());
 
@@ -374,12 +377,15 @@ mod tests {
         assert!(result.is_ok());
 
         let report = result.unwrap();
-        
+
         // Debug: Print all detected languages
         for file in &report.files {
-            eprintln!("Found file: {:?} with language: {}", file.path, file.language);
+            eprintln!(
+                "Found file: {:?} with language: {}",
+                file.path, file.language
+            );
         }
-        
+
         assert!(report.files.iter().all(|f| f.language == "python"));
     }
 

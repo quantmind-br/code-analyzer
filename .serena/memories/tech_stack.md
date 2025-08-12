@@ -1,42 +1,41 @@
-# Tech Stack
+# Tech Stack - Code Analyzer
 
-## Language
-- **Rust 2021 Edition**
+## Core Language & Runtime
+- **Rust 2021 Edition**: Modern Rust with latest features
+- **Minimum Rust Version**: 1.70+
 
-## Core Dependencies
+## Key Dependencies
 
-### CLI and Argument Parsing
-- **clap 4.0** - CLI argument parsing with derive API
+### CLI & User Interface
+- **clap 4.0**: Command-line argument parsing with derive API
+- **prettytable-rs 0.10**: Terminal table formatting
+- **indicatif 0.17**: Progress bars and spinners
 
-### AST Parsing and Code Analysis
-- **tree-sitter 0.20** - Core AST parsing library
-- **tree-sitter language grammars**:
-  - tree-sitter-rust 0.20
-  - tree-sitter-javascript 0.20  
-  - tree-sitter-python 0.20
-  - tree-sitter-java 0.20
-  - tree-sitter-c 0.20
-  - tree-sitter-cpp 0.20
-  - tree-sitter-go 0.20
-  - tree-sitter-typescript 0.20
+### AST Parsing & Language Support
+- **tree-sitter 0.20**: Core AST parsing engine
+- **Language Grammars**: Individual tree-sitter parsers for:
+  - tree-sitter-rust, tree-sitter-javascript, tree-sitter-python
+  - tree-sitter-java, tree-sitter-c, tree-sitter-cpp
+  - tree-sitter-go, tree-sitter-typescript
 
-### File System and Directory Traversal
-- **ignore 0.4** - Directory traversal with gitignore support
+### File System & Data Processing
+- **ignore 0.4**: Directory traversal with gitignore support
+- **rayon 1.8**: Parallel processing for performance
+- **serde 1.0 + serde_json 1.0**: JSON serialization
+- **chrono 0.4**: Date/time handling for reports
 
-### Output and Formatting
-- **prettytable-rs 0.10** - Terminal table formatting
-- **serde 1.0** - JSON serialization with derive features
-- **serde_json 1.0** - JSON handling
-- **chrono 0.4** - Datetime handling with serde features
+### Development & Testing
+- **tempfile 3.0**: Temporary directories for tests
+- **assert_cmd 2.0**: CLI testing framework
+- **predicates 3.0**: Test assertion predicates
 
-### Performance and Progress
-- **rayon 1.8** - Parallel processing
-- **indicatif 0.17** - Progress reporting and bars
+## Build Features
+- **Default**: `full-analysis` feature enabled
+- **Release Profile**: LTO optimization, single codegen unit, abort on panic
 
-## Development Dependencies
-- **tempfile 3.0** - Temporary files for testing
-- **assert_cmd 2.0** - CLI testing utilities
-- **predicates 3.0** - Test assertions
-
-## Build Configuration
-- **Release Profile**: LTO enabled, single codegen unit, panic=abort for optimization
+## Architecture Pattern
+- Modular design with clear separation:
+  - `analyzer/` - Core analysis engine with language detection, parsing, and walking
+  - `output/` - Dual output system (terminal + JSON)
+  - `cli.rs` - Command-line interface and argument handling
+  - `error.rs` - Centralized error handling

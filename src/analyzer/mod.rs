@@ -45,13 +45,8 @@ impl AnalyzerEngine {
     pub fn from_cli_args(args: &CliArgs) -> Result<Self> {
         // Validate and parse target languages
         let target_languages = if args.languages.is_empty() {
-            // Use stable languages by default instead of all languages
-            vec![
-                SupportedLanguage::Rust,
-                SupportedLanguage::Python,
-                SupportedLanguage::JavaScript,
-                SupportedLanguage::TypeScript,
-            ]
+            // Use all supported languages by default for comprehensive analysis
+            SupportedLanguage::all()
         } else {
             language::validate_language_list(&args.languages)?
         };
@@ -181,7 +176,10 @@ impl AnalyzerEngine {
 
             // Create a thread-local parser for this file
             let language_manager = LanguageManager::with_languages(enabled_languages.clone());
-            let mut file_parser = FileParser::new(language_manager, (max_file_size_bytes / (1024 * 1024)) as usize);
+            let mut file_parser = FileParser::new(
+                language_manager,
+                (max_file_size_bytes / (1024 * 1024)) as usize,
+            );
 
             // Analyze single file
             match file_parser.parse_file_metrics(file) {
@@ -222,7 +220,6 @@ impl AnalyzerEngine {
 
         Ok(results)
     }
-
 
     /// Apply CLI-based filters to analysis results
     fn apply_cli_filters(
@@ -308,12 +305,7 @@ pub fn analyze_project_simple<P: AsRef<Path>>(
 ) -> Result<AnalysisReport> {
     let cli_args = CliArgs {
         path: Some(target_path.as_ref().to_path_buf()),
-        languages: languages.unwrap_or_else(|| vec![
-            "rust".to_string(),
-            "python".to_string(),
-            "javascript".to_string(),
-            "typescript".to_string(),
-        ]),
+        languages: languages.unwrap_or_default(), // Empty vec triggers all languages in from_cli_args
         max_file_size_mb: max_file_size_mb.unwrap_or(10),
         verbose: false,
         ..Default::default()
@@ -420,7 +412,10 @@ mod tests {
         let result = engine.analyze_project(test_dir.path(), &cli_args);
 
         if result.is_err() {
-            eprintln!("test_analyze_project failed with error: {:?}", result.as_ref().unwrap_err());
+            eprintln!(
+                "test_analyze_project failed with error: {:?}",
+                result.as_ref().unwrap_err()
+            );
         }
         assert!(result.is_ok());
         let report = result.unwrap();
@@ -464,7 +459,10 @@ mod tests {
         let result = engine.analyze_project(test_dir.path(), &cli_args);
 
         if result.is_err() {
-            eprintln!("test_cli_filters failed with error: {:?}", result.as_ref().unwrap_err());
+            eprintln!(
+                "test_cli_filters failed with error: {:?}",
+                result.as_ref().unwrap_err()
+            );
         }
         assert!(result.is_ok());
         let report = result.unwrap();

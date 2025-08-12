@@ -38,6 +38,7 @@ Thumbs.db
 refactor-candidates.json
 test-results.json
 
-# AI assistant directories (optional - keep if you want to version control them)
-# .claude/
-# .gemini/
+# AI assistant directories and cache
+.claude/
+.gemini/
+.serena/cache/
