@@ -547,4 +547,106 @@ mod tests {
         let empty_files = vec![];
         display_compact_results(&empty_files, SortBy::Lines);
     }
+
+    #[test]
+    fn test_display_warnings() {
+        let reporter = TerminalReporter::new();
+
+        // Test with empty warnings (should not panic)
+        let warnings = vec![];
+        let result = reporter.display_warnings(&warnings);
+        assert!(result.is_ok());
+
+        // Test with syntax error warning
+        let warnings = vec![ParseWarning {
+            file_path: PathBuf::from("test.rs"),
+            warning_type: crate::error::WarningType::SyntaxError,
+            message: "Parse error".to_string(),
+        }];
+        let result = reporter.display_warnings(&warnings);
+        assert!(result.is_ok());
+
+        // Test with encoding error warning
+        let warnings = vec![ParseWarning {
+            file_path: PathBuf::from("test.py"),
+            warning_type: crate::error::WarningType::EncodingError,
+            message: "Invalid encoding".to_string(),
+        }];
+        let result = reporter.display_warnings(&warnings);
+        assert!(result.is_ok());
+
+        // Test with partial parse warning
+        let warnings = vec![ParseWarning {
+            file_path: PathBuf::from("test.js"),
+            warning_type: crate::error::WarningType::PartialParse,
+            message: "Incomplete parse".to_string(),
+        }];
+        let result = reporter.display_warnings(&warnings);
+        assert!(result.is_ok());
+
+        // Test with multiple warnings
+        let warnings = vec![
+            ParseWarning {
+                file_path: PathBuf::from("test1.rs"),
+                warning_type: crate::error::WarningType::SyntaxError,
+                message: "Error 1".to_string(),
+            },
+            ParseWarning {
+                file_path: PathBuf::from("test2.py"),
+                warning_type: crate::error::WarningType::EncodingError,
+                message: "Error 2".to_string(),
+            },
+        ];
+        let result = reporter.display_warnings(&warnings);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_display_project_summary_with_methods() {
+        use std::collections::HashMap;
+
+        let reporter = TerminalReporter::new();
+
+        // Create a summary with methods
+        let summary = ProjectSummary {
+            total_files: 2,
+            total_lines: 300,
+            total_functions: 10,
+            total_methods: 5,
+            total_classes: 3,
+            language_breakdown: HashMap::new(),
+            largest_files: vec![],
+            most_complex_files: vec![],
+        };
+
+        let result = reporter.display_project_summary(&summary);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_format_cyclomatic_cell() {
+        let reporter = TerminalReporter::new();
+
+        // Test low complexity (green)
+        let cell = reporter.format_cyclomatic_cell(5);
+        assert!(cell.get_content().contains("5"));
+
+        // Test medium complexity (yellow)
+        let cell = reporter.format_cyclomatic_cell(15);
+        assert!(cell.get_content().contains("15"));
+
+        // Test high complexity (red)
+        let cell = reporter.format_cyclomatic_cell(25);
+        assert!(cell.get_content().contains("25"));
+    }
+
+    #[test]
+    fn test_display_top_files() {
+        let files = create_test_file_analysis();
+        let summary = crate::analyzer::parser::create_project_summary(&files);
+
+        let reporter = TerminalReporter::new();
+        let result = reporter.display_top_files(&summary);
+        assert!(result.is_ok());
+    }
 }

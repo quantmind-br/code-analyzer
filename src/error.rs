@@ -191,6 +191,7 @@ impl AnalyzerError {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::error::Error;
     use std::io;
 
     #[test]
@@ -223,5 +224,63 @@ mod tests {
         }
 
         assert!(test_function().is_ok());
+    }
+
+    // ParseWarning tests
+    #[test]
+    fn test_parse_warning_syntax_error() {
+        let warning = ParseWarning::syntax_error("test.rs", "Parse error message");
+        assert_eq!(warning.file_path, PathBuf::from("test.rs"));
+        assert!(matches!(warning.warning_type, WarningType::SyntaxError));
+        assert_eq!(warning.message, "Parse error message");
+    }
+
+    #[test]
+    fn test_parse_warning_partial_parse() {
+        let warning = ParseWarning::partial_parse("test.py", "Incomplete parse");
+        assert_eq!(warning.file_path, PathBuf::from("test.py"));
+        assert!(matches!(warning.warning_type, WarningType::PartialParse));
+        assert_eq!(warning.message, "Incomplete parse");
+    }
+
+    #[test]
+    fn test_parse_warning_encoding_error() {
+        let warning = ParseWarning::encoding_error("test.js", "Invalid UTF-8");
+        assert_eq!(warning.file_path, PathBuf::from("test.js"));
+        assert!(matches!(warning.warning_type, WarningType::EncodingError));
+        assert_eq!(warning.message, "Invalid UTF-8");
+    }
+
+    #[test]
+    fn test_parse_warning_display() {
+        let warning = ParseWarning::syntax_error("src/main.rs", "Unexpected token");
+        let display_str = warning.to_string();
+
+        assert!(display_str.contains("src/main.rs"));
+        assert!(display_str.contains("Unexpected token"));
+        assert!(display_str.contains("syntax error"));
+    }
+
+    #[test]
+    fn test_error_source() {
+        let io_err = io::Error::new(io::ErrorKind::Other, "test error");
+        let analyzer_err: AnalyzerError = io_err.into();
+
+        assert!(analyzer_err.source().is_some());
+
+        let parse_err = AnalyzerError::parse_error("test");
+        assert!(parse_err.source().is_none());
+    }
+
+    #[test]
+    fn test_error_helper_functions() {
+        let err = AnalyzerError::tree_sitter_error("Tree parse failed");
+        assert!(err.to_string().contains("Tree-sitter"));
+
+        let err = AnalyzerError::config_error("Invalid config");
+        assert!(err.to_string().contains("Configuration"));
+
+        let err = AnalyzerError::validation_error("Validation failed");
+        assert!(err.to_string().contains("Validation"));
     }
 }

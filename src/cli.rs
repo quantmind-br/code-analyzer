@@ -333,6 +333,115 @@ mod tests {
         assert!(!args.should_output_terminal());
         assert!(args.should_output_json());
     }
+
+    #[test]
+    fn test_validate_valid_args() {
+        let args = CliArgs {
+            path: Some(PathBuf::from(".")), // Current directory exists
+            min_lines: 1,
+            max_lines: Some(1000),
+            max_file_size_mb: 10,
+            ..Default::default()
+        };
+        assert!(args.validate().is_ok());
+    }
+
+    #[test]
+    fn test_validate_nonexistent_path() {
+        let args = CliArgs {
+            path: Some(PathBuf::from("/nonexistent/path")),
+            ..Default::default()
+        };
+        let result = args.validate();
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("Invalid path"));
+    }
+
+    #[test]
+    fn test_validate_file_instead_of_directory() {
+        // Create a temporary file
+        let temp_file = std::env::temp_dir().join("test_file.txt");
+        std::fs::write(&temp_file, "test").unwrap();
+
+        let args = CliArgs {
+            path: Some(temp_file.clone()),
+            ..Default::default()
+        };
+        let result = args.validate();
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("must be a directory"));
+
+        // Cleanup
+        let _ = std::fs::remove_file(temp_file);
+    }
+
+    #[test]
+    fn test_validate_min_lines_greater_than_max() {
+        let args = CliArgs {
+            min_lines: 100,
+            max_lines: Some(50),
+            ..Default::default()
+        };
+        let result = args.validate();
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("min-lines must be less than max-lines"));
+    }
+
+    #[test]
+    fn test_validate_max_lines_equal_to_min_lines() {
+        let args = CliArgs {
+            min_lines: 50,
+            max_lines: Some(50),
+            ..Default::default()
+        };
+        let result = args.validate();
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("min-lines must be less than max-lines"));
+    }
+
+    #[test]
+    fn test_validate_zero_file_size() {
+        let args = CliArgs {
+            max_file_size_mb: 0,
+            ..Default::default()
+        };
+        let result = args.validate();
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("max-file-size-mb must be greater than 0"));
+    }
+
+    #[test]
+    fn test_validate_with_none_path() {
+        // None path should be valid (defaults to current directory)
+        let args = CliArgs {
+            path: None,
+            ..Default::default()
+        };
+        assert!(args.validate().is_ok());
+    }
+
+    #[test]
+    fn test_validate_with_only_min_lines() {
+        // No max_lines means no constraint
+        let args = CliArgs {
+            min_lines: 10,
+            max_lines: None,
+            ..Default::default()
+        };
+        assert!(args.validate().is_ok());
+    }
 }
 
 // Implement Default for testing convenience

@@ -608,4 +608,89 @@ fn main() {
         assert_eq!(rust_stats.file_count, 2);
         assert_eq!(rust_stats.avg_functions_per_file, 4.0); // 8/2
     }
+
+    #[test]
+    fn test_parse_file_with_warnings_encoding_error() {
+        use crate::analyzer::language::LanguageManager;
+        use tempfile::NamedTempFile;
+
+        let language_manager = LanguageManager::new();
+        let mut parser = FileParser::new(language_manager, 10);
+
+        // Create a temporary file with invalid UTF-8 bytes
+        let temp_file = NamedTempFile::new().unwrap();
+        let invalid_utf8 = vec![0xFF, 0xFE, 0xFD]; // Invalid UTF-8 sequence
+        std::fs::write(temp_file.path(), invalid_utf8).unwrap();
+
+        // This should return an error due to encoding issues
+        let result = parser.parse_file_with_warnings(temp_file.path());
+        assert!(result.is_err());
+
+        let _ = temp_file.close();
+    }
+
+    #[test]
+    fn test_file_analysis_result_structure() {
+        let file = FileAnalysis {
+            path: PathBuf::from("test.rs"),
+            language: "rust".to_string(),
+            lines_of_code: 50,
+            blank_lines: 5,
+            comment_lines: 10,
+            functions: 3,
+            methods: 2,
+            classes: 1,
+            cyclomatic_complexity: 5,
+            complexity_score: 2.5,
+        };
+
+        let result = FileAnalysisResult {
+            analysis: file,
+            warnings: vec![],
+        };
+
+        assert_eq!(result.analysis.lines_of_code, 50);
+        assert!(result.warnings.is_empty());
+    }
+
+    #[test]
+    fn test_parse_result_structure() {
+        // This tests the ParseResult structure used internally
+        let parse_result = ParseResult {
+            tree: None,
+            warnings: vec![],
+        };
+
+        assert!(parse_result.tree.is_none());
+        assert!(parse_result.warnings.is_empty());
+    }
+
+    #[test]
+    fn test_count_nodes_iterative_empty_tree() {
+        use crate::analyzer::language::SupportedLanguage;
+
+        let source = "fn main() {}";
+        let _language = SupportedLanguage::Rust;
+
+        // Create a minimal tree for testing
+        let mut parser = tree_sitter::Parser::new();
+        parser.set_language(tree_sitter_rust::language()).unwrap();
+        let tree = parser.parse(source, None).unwrap();
+        let root = tree.root_node();
+
+        // Test with a non-matching kind (should return 0)
+        let count = count_nodes_iterative(&root, |kind| kind == "nonexistent_node");
+        assert_eq!(count, 0);
+    }
+
+    #[test]
+    fn test_calculate_cyclomatic_complexity_none_tree() {
+        use crate::analyzer::language::SupportedLanguage;
+
+        let language = SupportedLanguage::Rust;
+        let complexity = calculate_cyclomatic_complexity(&None, &language);
+
+        // Should return minimum complexity of 1
+        assert_eq!(complexity, 1);
+    }
 }
