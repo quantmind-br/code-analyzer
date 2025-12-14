@@ -444,4 +444,239 @@ mod tests {
         assert!(summary.contains("Scanned"));
         assert!(summary.contains("found"));
     }
+
+    #[test]
+    fn test_discover_files_nonexistent_path() {
+        let language_manager = LanguageManager::new();
+        let walker = FileWalker::new(language_manager);
+
+        let result = walker.discover_files("/nonexistent/path");
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("Invalid path"));
+    }
+
+    #[test]
+    fn test_discover_files_file_instead_of_directory() {
+        let language_manager = LanguageManager::new();
+        let walker = FileWalker::new(language_manager);
+
+        // Create a temporary file
+        let temp_file = std::env::temp_dir().join("test_file.txt");
+        std::fs::write(&temp_file, "test").unwrap();
+
+        let result = walker.discover_files(&temp_file);
+        assert!(result.is_err());
+        assert!(result
+            .unwrap_err()
+            .to_string()
+            .contains("must be a directory"));
+
+        let _ = std::fs::remove_file(temp_file);
+    }
+
+    #[test]
+    fn test_file_walker_with_custom_config() {
+        use crate::analyzer::language::LanguageManager;
+
+        let language_manager = LanguageManager::new();
+        let config = FilterConfig {
+            max_file_size_bytes: 1000,
+            include_hidden: true,
+            exclude_patterns: vec!["*.tmp".to_string()],
+            target_languages: vec!["rust".to_string()],
+            follow_symlinks: false,
+            max_depth: Some(2),
+        };
+
+        let walker = FileWalker::with_config(language_manager, config);
+        assert_eq!(walker.filter_config().max_file_size_bytes, 1000);
+        assert!(walker.filter_config().include_hidden);
+        assert_eq!(walker.filter_config().exclude_patterns.len(), 1);
+    }
+
+    #[test]
+    fn test_set_filter_config() {
+        let language_manager = LanguageManager::new();
+        let walker = FileWalker::new(language_manager);
+
+        let new_config = FilterConfig {
+            max_file_size_bytes: 5000,
+            include_hidden: false,
+            exclude_patterns: vec![],
+            target_languages: vec![],
+            follow_symlinks: true,
+            max_depth: None,
+        };
+
+        let mut walker = walker;
+        walker.set_filter_config(new_config.clone());
+        assert_eq!(walker.filter_config().max_file_size_bytes, 5000);
+        assert!(!walker.filter_config().include_hidden);
+    }
+
+    #[test]
+    fn test_walker_configure_with_max_depth() {
+        use crate::analyzer::language::LanguageManager;
+
+        let language_manager = LanguageManager::new();
+        let config = FilterConfig {
+            max_file_size_bytes: u64::MAX,
+            include_hidden: false,
+            exclude_patterns: vec![],
+            target_languages: vec![],
+            follow_symlinks: false,
+            max_depth: Some(3),
+        };
+
+        let walker = FileWalker::with_config(language_manager, config);
+        assert_eq!(walker.filter_config().max_depth, Some(3));
+    }
+
+    #[test]
+    fn test_walker_configure_with_exclude_patterns() {
+        use crate::analyzer::language::LanguageManager;
+
+        let language_manager = LanguageManager::new();
+        let config = FilterConfig {
+            max_file_size_bytes: u64::MAX,
+            include_hidden: false,
+            exclude_patterns: vec!["*.tmp".to_string(), "*.log".to_string()],
+            target_languages: vec![],
+            follow_symlinks: false,
+            max_depth: None,
+        };
+
+        let walker = FileWalker::with_config(language_manager, config);
+        assert_eq!(walker.filter_config().exclude_patterns.len(), 2);
+        assert!(walker
+            .filter_config()
+            .exclude_patterns
+            .contains(&"*.tmp".to_string()));
+    }
+
+    #[test]
+    fn test_should_include_file_hidden() {
+        let language_manager = LanguageManager::new();
+        let config = FilterConfig {
+            max_file_size_bytes: u64::MAX,
+            include_hidden: false,
+            exclude_patterns: vec![],
+            target_languages: vec![],
+            follow_symlinks: false,
+            max_depth: None,
+        };
+
+        // Create a temporary hidden file
+        let temp_file = std::env::temp_dir().join(".hidden_file.rs");
+        std::fs::write(&temp_file, "fn main() {}").unwrap();
+
+        let result = should_include_file(&temp_file, &config, &language_manager);
+        assert!(result.is_ok());
+        assert!(matches!(result.unwrap(), IncludeResult::SkipHidden));
+
+        let _ = std::fs::remove_file(temp_file);
+    }
+
+    #[test]
+    fn test_should_include_file_language_not_detected() {
+        use crate::analyzer::language::LanguageManager;
+
+        let language_manager = LanguageManager::new();
+        let config = FilterConfig {
+            max_file_size_bytes: u64::MAX,
+            include_hidden: true,
+            exclude_patterns: vec![],
+            target_languages: vec![],
+            follow_symlinks: false,
+            max_depth: None,
+        };
+
+        // Create a file with no extension
+        let temp_file = std::env::temp_dir().join("test_file_no_ext");
+        std::fs::write(&temp_file, "some content").unwrap();
+
+        let result = should_include_file(&temp_file, &config, &language_manager);
+        assert!(result.is_ok());
+        assert!(matches!(result.unwrap(), IncludeResult::SkipLanguage));
+
+        let _ = std::fs::remove_file(temp_file);
+    }
+
+    #[test]
+    fn test_should_include_file_metadata_error() {
+        use crate::analyzer::language::LanguageManager;
+
+        let language_manager = LanguageManager::new();
+        let config = FilterConfig {
+            max_file_size_bytes: u64::MAX,
+            include_hidden: true,
+            exclude_patterns: vec![],
+            target_languages: vec![],
+            follow_symlinks: false,
+            max_depth: None,
+        };
+
+        // Test with a nonexistent file (will cause metadata() to fail)
+        let nonexistent_file = PathBuf::from("/nonexistent/file/that/does/not/exist.rs");
+
+        let result = should_include_file(&nonexistent_file, &config, &language_manager);
+        assert!(result.is_ok());
+        assert!(matches!(result.unwrap(), IncludeResult::SkipSize));
+    }
+
+    #[test]
+    fn test_include_result_variants() {
+        // Test that all IncludeResult variants can be created
+        assert!(matches!(IncludeResult::Include, IncludeResult::Include));
+        assert!(matches!(IncludeResult::SkipSize, IncludeResult::SkipSize));
+        assert!(matches!(
+            IncludeResult::SkipLanguage,
+            IncludeResult::SkipLanguage
+        ));
+        assert!(matches!(
+            IncludeResult::SkipHidden,
+            IncludeResult::SkipHidden
+        ));
+    }
+
+    #[test]
+    fn test_filter_config_default() {
+        let config = FilterConfig::default();
+        assert_eq!(config.max_file_size_bytes, 10 * 1024 * 1024); // 10 MB
+        assert!(!config.include_hidden);
+        assert!(config.exclude_patterns.is_empty());
+        assert!(config.target_languages.is_empty());
+        assert!(!config.follow_symlinks);
+        assert!(config.max_depth.is_none());
+    }
+
+    #[test]
+    fn test_walk_stats_summary_format() {
+        let stats = WalkStats {
+            total_entries_scanned: 100,
+            files_found: 50,
+            directories_scanned: 10,
+            files_skipped_size: 5,
+            files_skipped_language: 20,
+            files_skipped_hidden: 15,
+            errors_encountered: 2,
+        };
+
+        let summary = stats.summary();
+        assert!(summary.contains("100"));
+        assert!(summary.contains("50"));
+        assert!(summary.contains("10"));
+    }
+
+    #[test]
+    fn test_file_walker_show_progress() {
+        use crate::analyzer::language::LanguageManager;
+
+        let language_manager = LanguageManager::new();
+        let walker = FileWalker::new(language_manager);
+
+        // Test that show_progress returns a modified walker
+        let walker_with_progress = walker.show_progress(true);
+        assert!(walker_with_progress.show_progress);
+    }
 }

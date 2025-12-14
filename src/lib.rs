@@ -434,8 +434,26 @@ mod tests {
     fn test_analysis_config_default() {
         let config = AnalysisConfig::default();
         assert_eq!(config.min_lines, 1);
+        assert_eq!(config.max_lines, None); // Check max_lines is None
         assert_eq!(config.max_file_size_mb, 10);
         assert!(!config.include_hidden);
         assert!(!config.verbose);
+    }
+
+    #[test]
+    fn test_run_analysis_with_verbose_and_max_lines() {
+        use std::path::PathBuf;
+
+        let temp_dir = create_test_project();
+        let args = CliArgs {
+            path: Some(temp_dir.path().to_path_buf()),
+            min_lines: 1,
+            max_lines: Some(1000), // Set max_lines to trigger the uncovered line
+            verbose: true,         // Set verbose to trigger the uncovered line
+            ..Default::default()
+        };
+
+        let result = run_analysis(args);
+        assert!(result.is_ok());
     }
 }
