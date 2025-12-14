@@ -8,7 +8,7 @@ pub mod json;
 pub mod terminal;
 
 pub use json::{export_analysis_results, export_compact_json, JsonExporter};
-pub use terminal::{apply_sorting, create_simple_table, TerminalReporter};
+pub use terminal::{apply_sorting, create_simple_table, display_compact_table, TerminalReporter};
 
 /// Output manager that coordinates terminal and JSON output
 pub struct OutputManager {
@@ -296,7 +296,9 @@ mod tests {
                 blank_lines: 10,
                 comment_lines: 20,
                 functions: 5,
+                methods: 3,
                 classes: 2,
+                cyclomatic_complexity: 8,
                 complexity_score: 3.2,
             },
             crate::analyzer::FileAnalysis {
@@ -306,7 +308,9 @@ mod tests {
                 blank_lines: 8,
                 comment_lines: 15,
                 functions: 3,
+                methods: 2,
                 classes: 1,
+                cyclomatic_complexity: 5,
                 complexity_score: 2.1,
             },
         ];
@@ -327,6 +331,7 @@ mod tests {
             summary,
             config,
             generated_at: Utc::now(),
+            warnings: Vec::new(),
         }
     }
 

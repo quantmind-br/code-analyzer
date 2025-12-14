@@ -1,6 +1,6 @@
 use crate::analyzer::parser::{AnalysisReport, FileAnalysis, ProjectSummary};
 use crate::cli::SortBy;
-use crate::error::Result;
+use crate::error::{ParseWarning, Result};
 use prettytable::{format, row, Cell, Row, Table};
 use std::cmp::Ordering;
 
@@ -58,6 +58,39 @@ impl TerminalReporter {
             );
         }
 
+        // Display warnings if any
+        if !report.warnings.is_empty() {
+            println!();
+            self.display_warnings(&report.warnings)?;
+        }
+
+        Ok(())
+    }
+
+    /// Display parse warnings
+    pub fn display_warnings(&self, warnings: &[ParseWarning]) -> Result<()> {
+        if warnings.is_empty() {
+            return Ok(());
+        }
+
+        println!("Warnings ({}):", warnings.len());
+        println!("─────────────");
+
+        for warning in warnings {
+            let warning_type = match warning.warning_type {
+                crate::error::WarningType::SyntaxError => "⚠ Syntax",
+                crate::error::WarningType::PartialParse => "⚠ Partial",
+                crate::error::WarningType::EncodingError => "⚠ Encoding",
+            };
+
+            println!(
+                "{}: {} - {}",
+                warning_type,
+                warning.file_path.display(),
+                warning.message
+            );
+        }
+
         Ok(())
     }
 
@@ -102,9 +135,11 @@ impl TerminalReporter {
             bFg->"Lines",
             bFg->"Blank",
             bFg->"Comments",
-            bFg->"Functions",
+            bFg->"Funcs",
+            bFg->"Methods",
             bFg->"Classes",
-            bFg->"Complexity"
+            bFg->"CC",
+            bFg->"Score"
         ]);
 
         // Sort files according to the specified criteria
@@ -115,8 +150,15 @@ impl TerminalReporter {
         for file in sorted_files.iter().take(limit) {
             let path_display = self.format_file_path(&file.path);
 
+            // Color-code cyclomatic complexity
+            let cc_cell = if self.color_enabled {
+                self.format_cyclomatic_cell(file.cyclomatic_complexity)
+            } else {
+                Cell::new(&file.cyclomatic_complexity.to_string())
+            };
+
             // Color-code complexity scores
-            let complexity_cell = if self.color_enabled {
+            let score_cell = if self.color_enabled {
                 self.format_complexity_cell(file.complexity_score)
             } else {
                 Cell::new(&format!("{:.2}", file.complexity_score))
@@ -129,8 +171,10 @@ impl TerminalReporter {
                 Cell::new(&file.blank_lines.to_string()).style_spec("r"),
                 Cell::new(&file.comment_lines.to_string()).style_spec("r"),
                 Cell::new(&file.functions.to_string()).style_spec("r"),
+                Cell::new(&file.methods.to_string()).style_spec("r"),
                 Cell::new(&file.classes.to_string()).style_spec("r"),
-                complexity_cell.style_spec("r"),
+                cc_cell.style_spec("r"),
+                score_cell.style_spec("r"),
             ]));
         }
 
@@ -143,6 +187,7 @@ impl TerminalReporter {
         println!("├─ Files analyzed: {}", summary.total_files);
         println!("├─ Total lines: {}", summary.total_lines);
         println!("├─ Functions: {}", summary.total_functions);
+        println!("├─ Methods: {}", summary.total_methods);
         println!("└─ Classes: {}", summary.total_classes);
 
         if !summary.language_breakdown.is_empty() {
@@ -207,7 +252,7 @@ impl TerminalReporter {
             let mut table = Table::new();
             table.set_format(*format::consts::FORMAT_CLEAN);
             table.add_row(
-                row![bFg->"Rank", bFg->"File", bFg->"Functions", bFg->"Classes", bFg->"Complexity"],
+                row![bFg->"Rank", bFg->"File", bFg->"Functions", bFg->"Classes", bFg->"CC", bFg->"Score"],
             );
 
             for (i, file) in summary.most_complex_files.iter().enumerate().take(5) {
@@ -216,6 +261,7 @@ impl TerminalReporter {
                     self.format_file_path(&file.path),
                     file.functions.to_string(),
                     file.classes.to_string(),
+                    file.cyclomatic_complexity.to_string(),
                     format!("{:.2}", file.complexity_score)
                 ]);
             }
@@ -248,6 +294,20 @@ impl TerminalReporter {
             Cell::new(&complexity_str).style_spec("Fy")
         } else {
             Cell::new(&complexity_str).style_spec("Fr")
+        }
+    }
+
+    /// Format cyclomatic complexity cell with color coding
+    /// CC of 1-10: low (green), 11-20: moderate (yellow), 21+: high (red)
+    fn format_cyclomatic_cell(&self, cc: usize) -> Cell {
+        let cc_str = cc.to_string();
+
+        if cc <= 10 {
+            Cell::new(&cc_str).style_spec("Fg")
+        } else if cc <= 20 {
+            Cell::new(&cc_str).style_spec("Fy")
+        } else {
+            Cell::new(&cc_str).style_spec("Fr")
         }
     }
 }
@@ -319,6 +379,48 @@ pub fn display_compact_results(files: &[FileAnalysis], sort_by: SortBy) {
     }
 }
 
+/// Display compact table with only essential metrics (for CI/CD)
+pub fn display_compact_table(files: &[FileAnalysis], sort_by: SortBy, limit: usize) {
+    if files.is_empty() {
+        println!("No files found.");
+        return;
+    }
+
+    let mut table = Table::new();
+    table.set_format(*format::consts::FORMAT_CLEAN);
+
+    // Compact headers: only essential metrics
+    table.add_row(row![bFg->"File", bFg->"Lang", bFg->"Lines", bFg->"CC", bFg->"Score"]);
+
+    // Sort files
+    let mut sorted_files = files.to_vec();
+    apply_sorting(&mut sorted_files, sort_by);
+
+    // Add rows
+    for file in sorted_files.iter().take(limit) {
+        let path_str = file.path.display().to_string();
+        let short_path = if path_str.len() > 50 {
+            format!("...{}", &path_str[path_str.len() - 47..])
+        } else {
+            path_str
+        };
+
+        table.add_row(row![
+            short_path,
+            file.language,
+            file.lines_of_code.to_string(),
+            file.cyclomatic_complexity.to_string(),
+            format!("{:.1}", file.complexity_score)
+        ]);
+    }
+
+    table.printstd();
+
+    if files.len() > limit {
+        println!("(showing {} of {} files)", limit, files.len());
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -333,7 +435,9 @@ mod tests {
                 blank_lines: 20,
                 comment_lines: 30,
                 functions: 8,
+                methods: 4,
                 classes: 2,
+                cyclomatic_complexity: 12,
                 complexity_score: 3.5,
             },
             FileAnalysis {
@@ -343,7 +447,9 @@ mod tests {
                 blank_lines: 10,
                 comment_lines: 15,
                 functions: 5,
+                methods: 3,
                 classes: 1,
+                cyclomatic_complexity: 6,
                 complexity_score: 2.1,
             },
             FileAnalysis {
@@ -353,7 +459,9 @@ mod tests {
                 blank_lines: 25,
                 comment_lines: 40,
                 functions: 12,
+                methods: 8,
                 classes: 3,
+                cyclomatic_complexity: 18,
                 complexity_score: 4.8,
             },
         ]

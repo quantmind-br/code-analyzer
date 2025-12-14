@@ -5,7 +5,7 @@ use std::path::Path;
 use std::sync::{Arc, Mutex};
 
 use crate::cli::CliArgs;
-use crate::error::{AnalyzerError, Result};
+use crate::error::{AnalyzerError, ParseWarning, Result};
 
 pub mod language;
 pub mod parser;
@@ -13,8 +13,8 @@ pub mod walker;
 
 pub use language::{LanguageManager, SupportedLanguage};
 pub use parser::{
-    create_project_summary, AnalysisConfig, AnalysisReport, FileAnalysis, FileParser,
-    ProjectSummary,
+    create_project_summary, AnalysisConfig, AnalysisReport, FileAnalysis, FileAnalysisResult,
+    FileParser, ProjectSummary,
 };
 pub use walker::{create_walker_from_cli, FileWalker, FilterConfig, WalkStats};
 
@@ -51,23 +51,17 @@ impl AnalyzerEngine {
             language::validate_language_list(&args.languages)?
         };
 
-        // Create language manager with target languages
-        let language_manager = LanguageManager::with_languages(target_languages.clone());
+        // Create base language manager (created once, cloned for components that need their own copy)
+        let base_language_manager = LanguageManager::with_languages(target_languages);
 
-        // Create file parser with size limits
-        let file_parser = FileParser::new(
-            LanguageManager::with_languages(target_languages.clone()),
-            args.max_file_size_mb,
-        );
+        // Create file parser with size limits (needs own LanguageManager for thread-safety)
+        let file_parser = FileParser::new(base_language_manager.clone(), args.max_file_size_mb);
 
-        // Create file walker from CLI args
-        let file_walker = create_walker_from_cli(
-            args,
-            LanguageManager::with_languages(target_languages.clone()),
-        );
+        // Create file walker from CLI args (needs own LanguageManager for language detection)
+        let file_walker = create_walker_from_cli(args, base_language_manager.clone());
 
         Ok(Self {
-            language_manager,
+            language_manager: base_language_manager,
             file_parser,
             file_walker,
             show_progress: args.verbose,
@@ -100,8 +94,8 @@ impl AnalyzerEngine {
             ));
         }
 
-        // Step 2: Analyze files in parallel
-        let analysis_results = self.analyze_files_parallel(&files)?;
+        // Step 2: Analyze files in parallel (now returns warnings too)
+        let (analysis_results, warnings) = self.analyze_files_parallel(&files)?;
 
         // Step 3: Apply CLI filters
         let filtered_results = self.apply_cli_filters(analysis_results, cli_args);
@@ -119,12 +113,13 @@ impl AnalyzerEngine {
             max_file_size_mb: cli_args.max_file_size_mb,
         };
 
-        // Step 6: Create final report
+        // Step 6: Create final report with warnings
         let report = AnalysisReport {
             files: filtered_results,
             summary,
             config,
             generated_at: Utc::now(),
+            warnings,
         };
 
         if self.show_progress {
@@ -136,11 +131,11 @@ impl AnalyzerEngine {
         Ok(report)
     }
 
-    /// Analyze files in parallel with progress reporting
+    /// Result from parallel file analysis
     fn analyze_files_parallel(
         &mut self,
         files: &[std::path::PathBuf],
-    ) -> Result<Vec<FileAnalysis>> {
+    ) -> Result<(Vec<FileAnalysis>, Vec<ParseWarning>)> {
         let progress_bar = if self.show_progress {
             let pb = ProgressBar::new(files.len() as u64);
             pb.set_style(
@@ -155,8 +150,9 @@ impl AnalyzerEngine {
             None
         };
 
-        // Use thread-safe containers for results and errors
+        // Use thread-safe containers for results, warnings, and errors
         let results = Arc::new(Mutex::new(Vec::new()));
+        let warnings = Arc::new(Mutex::new(Vec::new()));
         let errors = Arc::new(Mutex::new(Vec::new()));
 
         let show_progress = self.show_progress;
@@ -181,10 +177,13 @@ impl AnalyzerEngine {
                 (max_file_size_bytes / (1024 * 1024)) as usize,
             );
 
-            // Analyze single file
-            match file_parser.parse_file_metrics(file) {
-                Ok(analysis) => {
-                    results.lock().unwrap().push(analysis);
+            // Analyze single file with warnings
+            match file_parser.parse_file_with_warnings(file) {
+                Ok(result) => {
+                    results.lock().unwrap().push(result.analysis);
+                    if !result.warnings.is_empty() {
+                        warnings.lock().unwrap().extend(result.warnings);
+                    }
                 }
                 Err(e) => {
                     if show_progress {
@@ -201,7 +200,7 @@ impl AnalyzerEngine {
 
         // Extract results
         let results = Arc::try_unwrap(results).unwrap().into_inner().unwrap();
-
+        let warnings = Arc::try_unwrap(warnings).unwrap().into_inner().unwrap();
         let errors = Arc::try_unwrap(errors).unwrap().into_inner().unwrap();
 
         // Report errors if in verbose mode
@@ -218,7 +217,7 @@ impl AnalyzerEngine {
             ));
         }
 
-        Ok(results)
+        Ok((results, warnings))
     }
 
     /// Apply CLI-based filters to analysis results

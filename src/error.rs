@@ -1,5 +1,73 @@
+use serde::{Deserialize, Serialize};
 use std::fmt;
 use std::path::PathBuf;
+
+/// Non-fatal warning during file parsing (e.g., partial parse, syntax errors)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ParseWarning {
+    /// Path to the file that generated the warning
+    pub file_path: PathBuf,
+    /// Type of warning
+    pub warning_type: WarningType,
+    /// Descriptive message
+    pub message: String,
+}
+
+/// Types of parse warnings
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub enum WarningType {
+    /// Tree-sitter reported syntax errors in the file
+    SyntaxError,
+    /// File could not be fully parsed
+    PartialParse,
+    /// File encoding issues
+    EncodingError,
+}
+
+impl ParseWarning {
+    /// Create a syntax error warning
+    pub fn syntax_error<P: Into<PathBuf>, S: Into<String>>(path: P, message: S) -> Self {
+        Self {
+            file_path: path.into(),
+            warning_type: WarningType::SyntaxError,
+            message: message.into(),
+        }
+    }
+
+    /// Create a partial parse warning
+    pub fn partial_parse<P: Into<PathBuf>, S: Into<String>>(path: P, message: S) -> Self {
+        Self {
+            file_path: path.into(),
+            warning_type: WarningType::PartialParse,
+            message: message.into(),
+        }
+    }
+
+    /// Create an encoding error warning
+    pub fn encoding_error<P: Into<PathBuf>, S: Into<String>>(path: P, message: S) -> Self {
+        Self {
+            file_path: path.into(),
+            warning_type: WarningType::EncodingError,
+            message: message.into(),
+        }
+    }
+}
+
+impl fmt::Display for ParseWarning {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(
+            f,
+            "{}: {} ({})",
+            self.file_path.display(),
+            self.message,
+            match self.warning_type {
+                WarningType::SyntaxError => "syntax error",
+                WarningType::PartialParse => "partial parse",
+                WarningType::EncodingError => "encoding error",
+            }
+        )
+    }
+}
 
 /// Comprehensive error type for the code analyzer application
 #[derive(Debug)]

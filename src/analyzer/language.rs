@@ -97,11 +97,29 @@ pub trait NodeKindMapper {
     /// Check if a node kind represents a class or struct declaration
     fn is_class_node(&self, kind: &str) -> bool;
 
+    /// Check if a node kind represents a control flow statement
+    fn is_control_flow_node(&self, kind: &str) -> bool;
+
     /// Get all function node kinds for this language
     fn function_node_kinds(&self) -> &[&str];
 
     /// Get all class node kinds for this language
     fn class_node_kinds(&self) -> &[&str];
+
+    /// Get all control flow node kinds for this language (for cyclomatic complexity)
+    fn control_flow_node_kinds(&self) -> &[&str];
+
+    /// Check if a node kind represents a comment
+    fn is_comment_node(&self, kind: &str) -> bool;
+
+    /// Get all comment node kinds for this language
+    fn comment_node_kinds(&self) -> &[&str];
+
+    /// Check if a node kind represents a method (function bound to a class/struct)
+    fn is_method_node(&self, kind: &str) -> bool;
+
+    /// Get all method node kinds for this language
+    fn method_node_kinds(&self) -> &[&str];
 }
 
 impl NodeKindMapper for SupportedLanguage {
@@ -111,6 +129,10 @@ impl NodeKindMapper for SupportedLanguage {
 
     fn is_class_node(&self, kind: &str) -> bool {
         self.class_node_kinds().contains(&kind)
+    }
+
+    fn is_control_flow_node(&self, kind: &str) -> bool {
+        self.control_flow_node_kinds().contains(&kind)
     }
 
     fn function_node_kinds(&self) -> &[&str] {
@@ -151,6 +173,126 @@ impl NodeKindMapper for SupportedLanguage {
             SupportedLanguage::C => &["struct_specifier"],
             SupportedLanguage::Cpp => &["class_specifier", "struct_specifier"],
             SupportedLanguage::Go => &["type_declaration"],
+        }
+    }
+
+    fn control_flow_node_kinds(&self) -> &[&str] {
+        match self {
+            SupportedLanguage::Rust => &[
+                "if_expression",
+                "match_expression",
+                "for_expression",
+                "while_expression",
+                "loop_expression",
+                "if_let_expression",
+                "while_let_expression",
+            ],
+            SupportedLanguage::JavaScript => &[
+                "if_statement",
+                "for_statement",
+                "for_in_statement",
+                "while_statement",
+                "do_statement",
+                "switch_statement",
+                "ternary_expression",
+                "try_statement",
+                "catch_clause",
+            ],
+            SupportedLanguage::TypeScript => &[
+                "if_statement",
+                "for_statement",
+                "for_in_statement",
+                "while_statement",
+                "do_statement",
+                "switch_statement",
+                "ternary_expression",
+                "try_statement",
+                "catch_clause",
+            ],
+            SupportedLanguage::Python => &[
+                "if_statement",
+                "for_statement",
+                "while_statement",
+                "try_statement",
+                "except_clause",
+                "with_statement",
+                "conditional_expression",
+                "list_comprehension",
+            ],
+            SupportedLanguage::Java => &[
+                "if_statement",
+                "for_statement",
+                "enhanced_for_statement",
+                "while_statement",
+                "do_statement",
+                "switch_expression",
+                "try_statement",
+                "catch_clause",
+                "ternary_expression",
+            ],
+            SupportedLanguage::C => &[
+                "if_statement",
+                "for_statement",
+                "while_statement",
+                "do_statement",
+                "switch_statement",
+                "conditional_expression",
+            ],
+            SupportedLanguage::Cpp => &[
+                "if_statement",
+                "for_statement",
+                "for_range_loop",
+                "while_statement",
+                "do_statement",
+                "switch_statement",
+                "try_statement",
+                "catch_clause",
+                "conditional_expression",
+            ],
+            SupportedLanguage::Go => &[
+                "if_statement",
+                "for_statement",
+                "switch_statement",
+                "select_statement",
+                "type_switch_statement",
+            ],
+        }
+    }
+
+    fn is_comment_node(&self, kind: &str) -> bool {
+        self.comment_node_kinds().contains(&kind)
+    }
+
+    fn comment_node_kinds(&self) -> &[&str] {
+        match self {
+            // Most languages use similar comment node types in tree-sitter
+            SupportedLanguage::Rust => &["line_comment", "block_comment"],
+            SupportedLanguage::JavaScript => &["comment"],
+            SupportedLanguage::TypeScript => &["comment"],
+            SupportedLanguage::Python => &["comment"],
+            SupportedLanguage::Java => &["line_comment", "block_comment"],
+            SupportedLanguage::C => &["comment"],
+            SupportedLanguage::Cpp => &["comment"],
+            SupportedLanguage::Go => &["comment"],
+        }
+    }
+
+    fn is_method_node(&self, kind: &str) -> bool {
+        self.method_node_kinds().contains(&kind)
+    }
+
+    fn method_node_kinds(&self) -> &[&str] {
+        match self {
+            // Rust: functions inside impl blocks are methods
+            // Note: tree-sitter marks all as function_item, we rely on parent context
+            SupportedLanguage::Rust => &[], // Rust doesn't distinguish at node level
+            SupportedLanguage::JavaScript => &["method_definition"],
+            SupportedLanguage::TypeScript => &["method_definition", "method_signature"],
+            SupportedLanguage::Python => &[], // Python uses function_definition for both
+            SupportedLanguage::Java => &["method_declaration"],
+            SupportedLanguage::C => &[], // C doesn't have methods
+            SupportedLanguage::Cpp => &["function_definition"], // Methods are still function_definition
+            SupportedLanguage::Go => &["method_declaration"],
         }
     }
 }

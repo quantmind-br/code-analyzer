@@ -135,6 +135,7 @@ impl JsonExporter {
             summary: report.summary.clone(),
             config: report.config.clone(),
             generated_at: report.generated_at,
+            warnings: report.warnings.clone(),
         };
 
         self.export_to_file(&filtered_report, file_path)
@@ -177,6 +178,7 @@ pub fn export_analysis_results<P: AsRef<Path>>(
         summary: summary.clone(),
         config: config.clone(),
         generated_at: chrono::Utc::now(),
+        warnings: Vec::new(),
     };
 
     let exporter = JsonExporter::new().pretty_print(pretty_print);
@@ -204,6 +206,7 @@ pub fn format_analysis_json(
         summary: summary.clone(),
         config: config.clone(),
         generated_at: chrono::Utc::now(),
+        warnings: Vec::new(),
     };
 
     let exporter = JsonExporter::new().pretty_print(pretty);
@@ -234,11 +237,18 @@ pub fn merge_analysis_reports(reports: &[AnalysisReport]) -> Result<AnalysisRepo
     // Use the configuration from the first report
     let base_report = &reports[0];
 
+    // Merge warnings from all reports
+    let mut merged_warnings = Vec::new();
+    for report in reports {
+        merged_warnings.extend_from_slice(&report.warnings);
+    }
+
     Ok(AnalysisReport {
         files: merged_files,
         summary: merged_summary,
         config: base_report.config.clone(),
         generated_at: chrono::Utc::now(),
+        warnings: merged_warnings,
     })
 }
 
@@ -259,7 +269,9 @@ mod tests {
                 blank_lines: 10,
                 comment_lines: 20,
                 functions: 5,
+                methods: 3,
                 classes: 2,
+                cyclomatic_complexity: 8,
                 complexity_score: 3.2,
             },
             FileAnalysis {
@@ -269,7 +281,9 @@ mod tests {
                 blank_lines: 8,
                 comment_lines: 15,
                 functions: 3,
+                methods: 2,
                 classes: 1,
+                cyclomatic_complexity: 5,
                 complexity_score: 2.1,
             },
         ];
@@ -290,6 +304,7 @@ mod tests {
             summary,
             config,
             generated_at: Utc::now(),
+            warnings: Vec::new(),
         }
     }
 

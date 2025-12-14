@@ -78,6 +78,13 @@ pub struct CliArgs {
     )]
     pub max_file_size_mb: usize,
 
+    /// Compact output mode (minimal output for CI/CD pipelines)
+    #[arg(
+        long,
+        help = "Compact output: essential metrics only (File, Language, Lines, CC, Score)"
+    )]
+    pub compact: bool,
+
     /// Output JSON to custom file path
     #[arg(long, value_name = "FILE", help = "Custom path for JSON output file")]
     pub output_file: Option<PathBuf>,
@@ -345,6 +352,7 @@ impl Default for CliArgs {
             exclude: Vec::new(),
             include_hidden: false,
             max_file_size_mb: 10,
+            compact: false,
             output_file: None,
             limit: 50,
         }

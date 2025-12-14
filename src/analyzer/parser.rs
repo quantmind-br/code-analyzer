@@ -6,7 +6,14 @@ use std::path::{Path, PathBuf};
 use tree_sitter::{Node, Tree};
 
 use super::language::{LanguageManager, NodeKindMapper, SupportedLanguage};
-use crate::error::{AnalyzerError, Result};
+use crate::error::{AnalyzerError, ParseWarning, Result};
+
+/// Complete result from file analysis including warnings
+#[derive(Debug)]
+pub struct FileAnalysisResult {
+    pub analysis: FileAnalysis,
+    pub warnings: Vec<ParseWarning>,
+}
 
 /// Analysis result for a single file
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -17,7 +24,9 @@ pub struct FileAnalysis {
     pub blank_lines: usize,
     pub comment_lines: usize,
     pub functions: usize,
+    pub methods: usize,
     pub classes: usize,
+    pub cyclomatic_complexity: usize,
     pub complexity_score: f64,
 }
 
@@ -27,13 +36,21 @@ impl FileAnalysis {
         self.lines_of_code + self.blank_lines + self.comment_lines
     }
 
-    /// Calculate a simple complexity score based on functions and classes
+    /// Calculate complexity score using cyclomatic complexity as primary factor
+    /// Formula: base_score (LOC) + cyclomatic_factor + structure_factor
     pub fn calculate_complexity(&mut self) {
-        let base_score = self.lines_of_code as f64 / 100.0;
-        let function_multiplier = (self.functions as f64).sqrt() * 0.5;
-        let class_multiplier = (self.classes as f64).sqrt() * 0.3;
+        // Base score from lines of code (normalized)
+        let loc_score = self.lines_of_code as f64 / 100.0;
 
-        self.complexity_score = base_score + function_multiplier + class_multiplier;
+        // Cyclomatic complexity is now the primary factor
+        // CC of 1-10: low, 11-20: moderate, 21-50: high, 50+: very high
+        let cc_score = self.cyclomatic_complexity as f64 * 0.3;
+
+        // Structure factor (functions and classes)
+        let structure_score =
+            (self.functions as f64).sqrt() * 0.2 + (self.classes as f64).sqrt() * 0.1;
+
+        self.complexity_score = loc_score + cc_score + structure_score;
     }
 }
 
@@ -44,6 +61,9 @@ pub struct AnalysisReport {
     pub summary: ProjectSummary,
     pub config: AnalysisConfig,
     pub generated_at: DateTime<Utc>,
+    /// Non-fatal warnings encountered during parsing
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub warnings: Vec<crate::error::ParseWarning>,
 }
 
 /// Project-wide summary statistics
@@ -52,6 +72,7 @@ pub struct ProjectSummary {
     pub total_files: usize,
     pub total_lines: usize,
     pub total_functions: usize,
+    pub total_methods: usize,
     pub total_classes: usize,
     pub language_breakdown: HashMap<String, LanguageStats>,
     pub largest_files: Vec<FileAnalysis>,
@@ -64,6 +85,7 @@ pub struct LanguageStats {
     pub file_count: usize,
     pub total_lines: usize,
     pub avg_functions_per_file: f64,
+    pub avg_methods_per_file: f64,
     pub avg_classes_per_file: f64,
 }
 
@@ -96,7 +118,17 @@ impl FileParser {
 
     /// Parse a single file and extract metrics
     pub fn parse_file_metrics<P: AsRef<Path>>(&mut self, path: P) -> Result<FileAnalysis> {
+        let result = self.parse_file_with_warnings(path)?;
+        Ok(result.analysis)
+    }
+
+    /// Parse a single file and extract metrics, including any warnings
+    pub fn parse_file_with_warnings<P: AsRef<Path>>(
+        &mut self,
+        path: P,
+    ) -> Result<FileAnalysisResult> {
         let path = path.as_ref();
+        let mut warnings = Vec::new();
 
         // Detect language
         let language = self.language_manager.detect_language(path).ok_or_else(|| {
@@ -120,19 +152,51 @@ impl FileParser {
         let source_code = fs::read(path)?;
 
         // Validate UTF-8 encoding
-        let source_text = std::str::from_utf8(&source_code)
-            .map_err(|e| AnalyzerError::parse_error(format!("Invalid UTF-8 encoding: {e}")))?;
+        let source_text = match std::str::from_utf8(&source_code) {
+            Ok(text) => text,
+            Err(e) => {
+                warnings.push(ParseWarning::encoding_error(
+                    path,
+                    format!("Invalid UTF-8 encoding: {e}"),
+                ));
+                return Err(AnalyzerError::parse_error(format!(
+                    "Invalid UTF-8 encoding: {e}"
+                )));
+            }
+        };
 
         // Parse with tree-sitter
         let parser = self.language_manager.get_parser(language)?;
-        let tree = parse_file_safely(parser, &source_code)?;
+        let parse_result = parse_file_safely(parser, &source_code, path)?;
 
-        // Count lines
+        // Collect any parsing warnings
+        warnings.extend(parse_result.warnings);
+
+        let tree = parse_result.tree;
+
+        // Count lines (basic count for blank lines, AST for comments)
         let line_counts = count_lines(source_text);
+
+        // Use AST-based comment counting for accuracy (falls back to heuristic if no tree)
+        let comment_lines = if tree.is_some() {
+            count_comment_lines_ast(&tree, &language)
+        } else {
+            line_counts.comments
+        };
+
+        // Recalculate code lines based on AST comment count
+        let total_non_blank = source_text.lines().filter(|l| !l.trim().is_empty()).count();
+        let lines_of_code = total_non_blank.saturating_sub(comment_lines);
 
         // Extract AST metrics
         let functions = if let Some(ref tree) = tree {
             count_functions(&tree.root_node(), &source_code, &language)
+        } else {
+            0
+        };
+
+        let methods = if let Some(ref tree) = tree {
+            count_methods(&tree.root_node(), &language)
         } else {
             0
         };
@@ -143,21 +207,26 @@ impl FileParser {
             0
         };
 
+        // Calculate cyclomatic complexity
+        let cyclomatic_complexity = calculate_cyclomatic_complexity(&tree, &language);
+
         let mut analysis = FileAnalysis {
             path: path.to_path_buf(),
             language: language.to_string(),
-            lines_of_code: line_counts.code,
+            lines_of_code,
             blank_lines: line_counts.blank,
-            comment_lines: line_counts.comments,
+            comment_lines,
             functions,
+            methods,
             classes,
+            cyclomatic_complexity,
             complexity_score: 0.0,
         };
 
-        // Calculate complexity score
+        // Calculate complexity score (uses cyclomatic_complexity)
         analysis.calculate_complexity();
 
-        Ok(analysis)
+        Ok(FileAnalysisResult { analysis, warnings })
     }
 
     /// Check if a file can be parsed (size and language support)
@@ -188,8 +257,9 @@ impl FileParser {
     }
 }
 
-/// Line counting results
+/// Line counting results (heuristic-based, used as fallback when AST unavailable)
 #[derive(Debug)]
+#[allow(dead_code)]
 struct LineCounts {
     code: usize,
     blank: usize,
@@ -232,15 +302,34 @@ fn is_comment_line(line: &str) -> bool {
         || line.starts_with("-->") // HTML comment end
 }
 
-/// Safely parse a file with error recovery
-fn parse_file_safely(parser: &mut tree_sitter::Parser, source: &[u8]) -> Result<Option<Tree>> {
+/// Parse result including tree and any warnings
+pub struct ParseResult {
+    pub tree: Option<Tree>,
+    pub warnings: Vec<ParseWarning>,
+}
+
+/// Safely parse a file with error recovery and warning collection
+fn parse_file_safely(
+    parser: &mut tree_sitter::Parser,
+    source: &[u8],
+    file_path: &Path,
+) -> Result<ParseResult> {
     match parser.parse(source, None) {
         Some(tree) => {
+            let mut warnings = Vec::new();
+
             if tree.root_node().has_error() {
-                // Log the error but continue with partial results
-                eprintln!("Parse errors detected in file, results may be incomplete");
+                // Collect warning instead of eprintln!
+                warnings.push(ParseWarning::syntax_error(
+                    file_path,
+                    "Parse errors detected, results may be incomplete",
+                ));
             }
-            Ok(Some(tree))
+
+            Ok(ParseResult {
+                tree: Some(tree),
+                warnings,
+            })
         }
         None => Err(AnalyzerError::tree_sitter_error(
             "Failed to parse file - tree-sitter returned None",
@@ -248,40 +337,111 @@ fn parse_file_safely(parser: &mut tree_sitter::Parser, source: &[u8]) -> Result<
     }
 }
 
-/// Count function declarations in an AST tree
-fn count_functions(node: &Node, _source: &[u8], language: &SupportedLanguage) -> usize {
+/// Generic iterative AST traversal using TreeCursor (stack-safe)
+fn count_nodes_iterative<F>(root: &Node, is_target: F) -> usize
+where
+    F: Fn(&str) -> bool,
+{
     let mut count = 0;
+    let mut cursor = root.walk();
 
-    // Check if this node is a function
-    if language.is_function_node(node.kind()) {
-        count += 1;
+    loop {
+        // Check current node
+        if is_target(cursor.node().kind()) {
+            count += 1;
+        }
+
+        // Try to descend to first child
+        if cursor.goto_first_child() {
+            continue;
+        }
+
+        // No children, try siblings or go up
+        loop {
+            if cursor.goto_next_sibling() {
+                break;
+            }
+
+            if !cursor.goto_parent() {
+                return count; // Reached root, traversal complete
+            }
+        }
     }
-
-    // Recursively traverse children
-    let mut cursor = node.walk();
-    for child in node.children(&mut cursor) {
-        count += count_functions(&child, _source, language);
-    }
-
-    count
 }
 
-/// Count class/struct declarations in an AST tree
+/// Count function declarations in an AST tree (iterative, stack-safe)
+fn count_functions(node: &Node, _source: &[u8], language: &SupportedLanguage) -> usize {
+    count_nodes_iterative(node, |kind| language.is_function_node(kind))
+}
+
+/// Count class/struct declarations in an AST tree (iterative, stack-safe)
 fn count_classes(node: &Node, _source: &[u8], language: &SupportedLanguage) -> usize {
-    let mut count = 0;
+    count_nodes_iterative(node, |kind| language.is_class_node(kind))
+}
 
-    // Check if this node is a class/struct
-    if language.is_class_node(node.kind()) {
-        count += 1;
+/// Count control flow nodes for cyclomatic complexity (iterative, stack-safe)
+fn count_control_flow(node: &Node, language: &SupportedLanguage) -> usize {
+    count_nodes_iterative(node, |kind| language.is_control_flow_node(kind))
+}
+
+/// Count method declarations in an AST tree (iterative, stack-safe)
+fn count_methods(node: &Node, language: &SupportedLanguage) -> usize {
+    count_nodes_iterative(node, |kind| language.is_method_node(kind))
+}
+
+/// Calculate cyclomatic complexity: 1 + number of decision points
+/// This follows the formula: M = E - N + 2P, simplified for single-component graphs
+fn calculate_cyclomatic_complexity(tree: &Option<Tree>, language: &SupportedLanguage) -> usize {
+    match tree {
+        Some(tree) => {
+            // Base complexity is 1 (for the main path)
+            // Each decision point adds 1 to the complexity
+            1 + count_control_flow(&tree.root_node(), language)
+        }
+        None => 1, // Minimum complexity for unparseable files
     }
+}
 
-    // Recursively traverse children
-    let mut cursor = node.walk();
-    for child in node.children(&mut cursor) {
-        count += count_classes(&child, _source, language);
+/// Count comment lines using AST - more accurate than heuristic
+/// Returns the number of unique lines that contain comments
+fn count_comment_lines_ast(tree: &Option<Tree>, language: &SupportedLanguage) -> usize {
+    use std::collections::HashSet;
+
+    match tree {
+        Some(tree) => {
+            let mut comment_lines = HashSet::new();
+            let mut cursor = tree.root_node().walk();
+
+            loop {
+                let node = cursor.node();
+
+                // Check if this is a comment node
+                if language.is_comment_node(node.kind()) {
+                    // Add all lines this comment spans
+                    let start_line = node.start_position().row;
+                    let end_line = node.end_position().row;
+                    for line in start_line..=end_line {
+                        comment_lines.insert(line);
+                    }
+                }
+
+                // Navigate tree iteratively
+                if cursor.goto_first_child() {
+                    continue;
+                }
+
+                loop {
+                    if cursor.goto_next_sibling() {
+                        break;
+                    }
+                    if !cursor.goto_parent() {
+                        return comment_lines.len();
+                    }
+                }
+            }
+        }
+        None => 0,
     }
-
-    count
 }
 
 /// Create a project summary from analysis results
@@ -289,6 +449,7 @@ pub fn create_project_summary(files: &[FileAnalysis]) -> ProjectSummary {
     let total_files = files.len();
     let total_lines = files.iter().map(|f| f.total_lines()).sum();
     let total_functions = files.iter().map(|f| f.functions).sum();
+    let total_methods = files.iter().map(|f| f.methods).sum();
     let total_classes = files.iter().map(|f| f.classes).sum();
 
     // Calculate language breakdown
@@ -300,6 +461,7 @@ pub fn create_project_summary(files: &[FileAnalysis]) -> ProjectSummary {
                 file_count: 0,
                 total_lines: 0,
                 avg_functions_per_file: 0.0,
+                avg_methods_per_file: 0.0,
                 avg_classes_per_file: 0.0,
             });
 
@@ -311,10 +473,17 @@ pub fn create_project_summary(files: &[FileAnalysis]) -> ProjectSummary {
     for (lang, stats) in language_breakdown.iter_mut() {
         let lang_files: Vec<_> = files.iter().filter(|f| f.language == *lang).collect();
         let total_functions: usize = lang_files.iter().map(|f| f.functions).sum();
+        let total_methods: usize = lang_files.iter().map(|f| f.methods).sum();
         let total_classes: usize = lang_files.iter().map(|f| f.classes).sum();
 
         stats.avg_functions_per_file = if stats.file_count > 0 {
             total_functions as f64 / stats.file_count as f64
+        } else {
+            0.0
+        };
+
+        stats.avg_methods_per_file = if stats.file_count > 0 {
+            total_methods as f64 / stats.file_count as f64
         } else {
             0.0
         };
@@ -340,6 +509,7 @@ pub fn create_project_summary(files: &[FileAnalysis]) -> ProjectSummary {
         total_files,
         total_lines,
         total_functions,
+        total_methods,
         total_classes,
         language_breakdown,
         largest_files,
@@ -388,7 +558,9 @@ fn main() {
             blank_lines: 10,
             comment_lines: 20,
             functions: 5,
+            methods: 3,
             classes: 2,
+            cyclomatic_complexity: 10,
             complexity_score: 0.0,
         };
 
@@ -406,7 +578,9 @@ fn main() {
                 blank_lines: 10,
                 comment_lines: 5,
                 functions: 3,
+                methods: 2,
                 classes: 1,
+                cyclomatic_complexity: 5,
                 complexity_score: 2.5,
             },
             FileAnalysis {
@@ -416,7 +590,9 @@ fn main() {
                 blank_lines: 20,
                 comment_lines: 10,
                 functions: 5,
+                methods: 4,
                 classes: 2,
+                cyclomatic_complexity: 8,
                 complexity_score: 4.0,
             },
         ];

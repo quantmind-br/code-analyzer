@@ -105,9 +105,15 @@ pub fn run_analysis(args: CliArgs) -> Result<()> {
     // Run the analysis
     let report = analyzer.analyze_project(args.target_path(), &args)?;
 
-    // Generate output
-    let output_manager = OutputManager::from_cli_args(&args);
-    output_manager.generate_output(&report, &args)?;
+    // Generate output based on compact mode or normal mode
+    if args.compact {
+        // Compact output: minimal table for CI/CD
+        output::display_compact_table(&report.files, args.sort, args.limit);
+    } else {
+        // Normal output: full report with summary
+        let output_manager = OutputManager::from_cli_args(&args);
+        output_manager.generate_output(&report, &args)?;
+    }
 
     if args.verbose {
         println!();
