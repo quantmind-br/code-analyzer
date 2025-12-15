@@ -363,8 +363,8 @@ impl FileParser {
             0
         };
 
-        // Calculate cyclomatic complexity
-        let cyclomatic_complexity = calculate_cyclomatic_complexity(&tree, &language);
+        // Calculate cyclomatic complexity (includes logical operators per McCabe)
+        let cyclomatic_complexity = calculate_cyclomatic_complexity(&tree, &source_code, &language);
 
         let mut analysis = FileAnalysis {
             path: path.to_path_buf(),
@@ -896,19 +896,96 @@ fn count_control_flow(node: &Node, language: &SupportedLanguage) -> usize {
     count_nodes_iterative(node, |kind| language.is_control_flow_node(kind))
 }
 
+/// Count logical operators (&& / ||) in binary expressions for cyclomatic complexity
+/// Per McCabe's original paper, compound predicates should count each condition
+/// e.g., "if (a && b)" has CC=3 (1 base + 1 if + 1 &&)
+fn count_logical_operators(node: &Node, source: &[u8], language: &SupportedLanguage) -> usize {
+    // Python handles this via 'boolean_operator' node in control_flow_node_kinds
+    let binary_kind = match language.binary_expression_node_kind() {
+        Some(kind) => kind,
+        None => return 0,
+    };
+
+    let logical_ops = language.logical_operators();
+    if logical_ops.is_empty() {
+        return 0;
+    }
+
+    let mut count = 0;
+    let mut cursor = node.walk();
+
+    loop {
+        let current = cursor.node();
+
+        // Check if this is a binary expression
+        if current.kind() == binary_kind {
+            // Look for the operator child node
+            // In tree-sitter, the operator is typically an anonymous node
+            // We need to find a child that matches our logical operators
+            for i in 0..current.child_count() {
+                if let Some(child) = current.child(i as u32) {
+                    // Anonymous nodes (operators) have is_named() == false
+                    if !child.is_named() {
+                        if let Ok(op_text) = child.utf8_text(source) {
+                            if logical_ops.contains(&op_text) {
+                                count += 1;
+                                break; // Only count once per binary_expression
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Navigate tree iteratively
+        if cursor.goto_first_child() {
+            continue;
+        }
+
+        loop {
+            if cursor.goto_next_sibling() {
+                break;
+            }
+            if !cursor.goto_parent() {
+                return count;
+            }
+        }
+    }
+}
+
 /// Count method declarations in an AST tree (iterative, stack-safe)
 fn count_methods(node: &Node, language: &SupportedLanguage) -> usize {
     count_nodes_iterative(node, |kind| language.is_method_node(kind))
 }
 
-/// Calculate cyclomatic complexity: 1 + number of decision points
-/// This follows the formula: M = E - N + 2P, simplified for single-component graphs
-fn calculate_cyclomatic_complexity(tree: &Option<Tree>, language: &SupportedLanguage) -> usize {
+/// Calculate cyclomatic complexity: 1 + number of decision points + logical operators
+///
+/// This follows McCabe's original formula where compound predicates count each condition.
+/// For example: `if (a && b)` has CC=3 (1 base + 1 if + 1 &&)
+///
+/// Formula: M = 1 + decision_points + logical_operators
+/// - decision_points: if, for, while, switch, catch, ternary, etc.
+/// - logical_operators: && and || (compound predicates per McCabe)
+///
+/// Reference: NIST SP 500-235, McCabe's original 1976 paper
+fn calculate_cyclomatic_complexity(
+    tree: &Option<Tree>,
+    source: &[u8],
+    language: &SupportedLanguage,
+) -> usize {
     match tree {
         Some(tree) => {
             // Base complexity is 1 (for the main path)
-            // Each decision point adds 1 to the complexity
-            1 + count_control_flow(&tree.root_node(), language)
+            let base = 1;
+
+            // Count decision points (if, for, while, switch, etc.)
+            let decision_points = count_control_flow(&tree.root_node(), language);
+
+            // Count logical operators (&& / ||) per McCabe's compound predicate rule
+            // Note: Python's 'and'/'or' are handled via boolean_operator in decision_points
+            let logical_ops = count_logical_operators(&tree.root_node(), source, language);
+
+            base + decision_points + logical_ops
         }
         None => 1, // Minimum complexity for unparseable files
     }
@@ -1246,9 +1323,48 @@ export const X = React.forwardRef<
         use crate::analyzer::language::SupportedLanguage;
 
         let language = SupportedLanguage::Rust;
-        let complexity = calculate_cyclomatic_complexity(&None, &language);
+        let source = b"";
+        let complexity = calculate_cyclomatic_complexity(&None, source, &language);
 
         // Should return minimum complexity of 1
         assert_eq!(complexity, 1);
+    }
+
+    #[test]
+    fn test_calculate_cyclomatic_complexity_with_logical_operators() {
+        use crate::analyzer::language::SupportedLanguage;
+
+        // Test Rust code with logical operators
+        let source = b"fn test() { if a && b { } if c || d { } }";
+        let mut parser = tree_sitter::Parser::new();
+        parser
+            .set_language(&tree_sitter_rust::LANGUAGE.into())
+            .unwrap();
+        let tree = parser.parse(&source[..], None);
+
+        let language = SupportedLanguage::Rust;
+        let complexity = calculate_cyclomatic_complexity(&tree, source, &language);
+
+        // Expected: 1 base + 2 if statements + 2 logical operators (&&, ||) = 5
+        assert_eq!(complexity, 5);
+    }
+
+    #[test]
+    fn test_calculate_cyclomatic_complexity_compound_predicates() {
+        use crate::analyzer::language::SupportedLanguage;
+
+        // Test with multiple chained logical operators
+        let source = b"fn test() { if a && b && c || d { } }";
+        let mut parser = tree_sitter::Parser::new();
+        parser
+            .set_language(&tree_sitter_rust::LANGUAGE.into())
+            .unwrap();
+        let tree = parser.parse(&source[..], None);
+
+        let language = SupportedLanguage::Rust;
+        let complexity = calculate_cyclomatic_complexity(&tree, source, &language);
+
+        // Expected: 1 base + 1 if + 3 logical operators (&&, &&, ||) = 5
+        assert_eq!(complexity, 5);
     }
 }

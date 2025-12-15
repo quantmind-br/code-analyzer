@@ -125,6 +125,15 @@ pub trait NodeKindMapper {
 
     /// Get all method node kinds for this language
     fn method_node_kinds(&self) -> &[&str];
+
+    /// Check if a node kind represents a binary expression that may contain logical operators
+    fn is_binary_expression_node(&self, kind: &str) -> bool;
+
+    /// Get the binary expression node kind for this language (for logical operator counting)
+    fn binary_expression_node_kind(&self) -> Option<&'static str>;
+
+    /// Get the logical operators for this language
+    fn logical_operators(&self) -> &[&str];
 }
 
 impl NodeKindMapper for SupportedLanguage {
@@ -187,7 +196,7 @@ impl NodeKindMapper for SupportedLanguage {
         match self {
             SupportedLanguage::Rust => &[
                 "if_expression",
-                "match_expression",
+                "match_arm", // Each arm of a match is a decision point (not match_expression)
                 "for_expression",
                 "while_expression",
                 "loop_expression",
@@ -200,7 +209,8 @@ impl NodeKindMapper for SupportedLanguage {
                 "for_in_statement",
                 "while_statement",
                 "do_statement",
-                "switch_statement",
+                "switch_case", // Each case is a decision point (per industry standard)
+                "switch_default", // Default case is also a path
                 "ternary_expression",
                 "try_statement",
                 "catch_clause",
@@ -211,7 +221,8 @@ impl NodeKindMapper for SupportedLanguage {
                 "for_in_statement",
                 "while_statement",
                 "do_statement",
-                "switch_statement",
+                "switch_case", // Each case is a decision point (per industry standard)
+                "switch_default", // Default case is also a path
                 "ternary_expression",
                 "try_statement",
                 "catch_clause",
@@ -225,6 +236,10 @@ impl NodeKindMapper for SupportedLanguage {
                 "with_statement",
                 "conditional_expression",
                 "list_comprehension",
+                "dictionary_comprehension",
+                "set_comprehension",
+                "generator_expression",
+                "boolean_operator", // 'and' / 'or' operators (McCabe: compound predicates)
             ],
             SupportedLanguage::Java => &[
                 "if_statement",
@@ -232,7 +247,7 @@ impl NodeKindMapper for SupportedLanguage {
                 "enhanced_for_statement",
                 "while_statement",
                 "do_statement",
-                "switch_expression",
+                "switch_label", // Each case label is a decision point
                 "try_statement",
                 "catch_clause",
                 "ternary_expression",
@@ -242,7 +257,7 @@ impl NodeKindMapper for SupportedLanguage {
                 "for_statement",
                 "while_statement",
                 "do_statement",
-                "switch_statement",
+                "case_statement", // Each case is a decision point
                 "conditional_expression",
             ],
             SupportedLanguage::Cpp => &[
@@ -251,7 +266,7 @@ impl NodeKindMapper for SupportedLanguage {
                 "for_range_loop",
                 "while_statement",
                 "do_statement",
-                "switch_statement",
+                "case_statement", // Each case is a decision point
                 "try_statement",
                 "catch_clause",
                 "conditional_expression",
@@ -259,9 +274,10 @@ impl NodeKindMapper for SupportedLanguage {
             SupportedLanguage::Go => &[
                 "if_statement",
                 "for_statement",
-                "switch_statement",
-                "select_statement",
-                "type_switch_statement",
+                "expression_case",    // Each case in switch is a decision point
+                "default_case",       // Default case is also a path
+                "type_case",          // Type switch case
+                "communication_case", // Select case
             ],
         }
     }
@@ -302,6 +318,35 @@ impl NodeKindMapper for SupportedLanguage {
             SupportedLanguage::C => &[], // C doesn't have methods
             SupportedLanguage::Cpp => &["function_definition"], // Methods are still function_definition
             SupportedLanguage::Go => &["method_declaration"],
+        }
+    }
+
+    fn is_binary_expression_node(&self, kind: &str) -> bool {
+        self.binary_expression_node_kind()
+            .is_some_and(|k| k == kind)
+    }
+
+    fn binary_expression_node_kind(&self) -> Option<&'static str> {
+        match self {
+            // Python uses 'boolean_operator' which is already in control_flow_node_kinds
+            SupportedLanguage::Python => None,
+            // All C-like languages use 'binary_expression' for && and ||
+            SupportedLanguage::Rust => Some("binary_expression"),
+            SupportedLanguage::JavaScript => Some("binary_expression"),
+            SupportedLanguage::TypeScript | SupportedLanguage::Tsx => Some("binary_expression"),
+            SupportedLanguage::Java => Some("binary_expression"),
+            SupportedLanguage::C => Some("binary_expression"),
+            SupportedLanguage::Cpp => Some("binary_expression"),
+            SupportedLanguage::Go => Some("binary_expression"),
+        }
+    }
+
+    fn logical_operators(&self) -> &[&str] {
+        match self {
+            // Python uses 'and' and 'or' but they're handled via boolean_operator node
+            SupportedLanguage::Python => &[],
+            // All C-like languages use && and ||
+            _ => &["&&", "||"],
         }
     }
 }
