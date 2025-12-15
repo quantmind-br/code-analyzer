@@ -123,7 +123,7 @@ pub struct CliArgs {
     #[arg(
         long,
         value_name = "SCORE",
-        help = "Complexity score threshold for refactoring candidates (default: 7.0)"
+        help = "Complexity score threshold for refactoring candidates (default: 10.0)"
     )]
     pub max_complexity_score: Option<f64>,
 
@@ -131,7 +131,7 @@ pub struct CliArgs {
     #[arg(
         long,
         value_name = "CC",
-        help = "Cyclomatic complexity threshold per McCabe/NIST standard (default: 10)"
+        help = "Cyclomatic complexity threshold per NIST guidance (default: 15)"
     )]
     pub max_cc: Option<usize>,
 
@@ -139,7 +139,7 @@ pub struct CliArgs {
     #[arg(
         long,
         value_name = "LINES",
-        help = "Lines of code threshold for large file detection (default: 300)"
+        help = "Lines of code threshold for large file detection (default: 500)"
     )]
     pub max_loc: Option<usize>,
 
@@ -147,7 +147,7 @@ pub struct CliArgs {
     #[arg(
         long,
         value_name = "COUNT",
-        help = "Function count threshold for refactoring candidates (default: 15)"
+        help = "Function count threshold for refactoring candidates (default: 25)"
     )]
     pub max_functions_per_file: Option<usize>,
 

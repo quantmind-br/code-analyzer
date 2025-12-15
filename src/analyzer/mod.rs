@@ -199,7 +199,10 @@ impl AnalyzerEngine {
                                             loc.line, loc.column, loc.kind, snippet
                                         );
                                     } else {
-                                        eprintln!("  at {}:{} ({})", loc.line, loc.column, loc.kind);
+                                        eprintln!(
+                                            "  at {}:{} ({})",
+                                            loc.line, loc.column, loc.kind
+                                        );
                                     }
                                 }
                             }

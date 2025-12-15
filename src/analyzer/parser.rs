@@ -1,7 +1,7 @@
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
 use std::borrow::Cow;
+use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
 use tree_sitter::{Node, Tree};
@@ -38,18 +38,29 @@ impl FileAnalysis {
     }
 
     /// Calculate complexity score using cyclomatic complexity as primary factor
-    /// Formula: base_score (LOC) + cyclomatic_factor + structure_factor
+    ///
+    /// Formula: loc_factor + cyclomatic_factor + structure_factor
+    ///
+    /// The weights are calibrated so that:
+    /// - A file with 500 LOC, CC=15, 10 functions → score ≈ 10.0 (threshold)
+    /// - Cyclomatic complexity has the highest weight (industry best practice)
+    /// - LOC contributes proportionally but with diminishing returns
+    /// - Structure factor accounts for module organization
     pub fn calculate_complexity(&mut self) {
-        // Base score from lines of code (normalized)
-        let loc_score = self.lines_of_code as f64 / 100.0;
+        // LOC factor: normalized with diminishing returns for very large files
+        // 500 LOC → 2.5 points (at threshold)
+        let loc_score = (self.lines_of_code as f64 / 200.0).min(5.0);
 
-        // Cyclomatic complexity is now the primary factor
+        // Cyclomatic complexity is the primary factor (per NIST/McCabe)
         // CC of 1-10: low, 11-20: moderate, 21-50: high, 50+: very high
-        let cc_score = self.cyclomatic_complexity as f64 * 0.3;
+        // CC=15 → 6.0 points (at threshold)
+        let cc_score = self.cyclomatic_complexity as f64 * 0.4;
 
-        // Structure factor (functions and classes)
+        // Structure factor: rewards modular design with many small functions
+        // 10 functions → ~0.95 points, 25 functions → ~1.5 points
+        // Classes add minor weight
         let structure_score =
-            (self.functions as f64).sqrt() * 0.2 + (self.classes as f64).sqrt() * 0.1;
+            (self.functions as f64).sqrt() * 0.3 + (self.classes as f64).sqrt() * 0.15;
 
         self.complexity_score = loc_score + cc_score + structure_score;
     }
@@ -146,30 +157,35 @@ impl RefactoringCandidate {
 
 /// Configurable thresholds for identifying refactoring candidates
 ///
-/// Default values are based on industry standards:
-/// - Cyclomatic Complexity: 10 (McCabe/NIST recommendation)
-/// - Lines of Code: 300 (common best practice for file size)
-/// - Functions per file: 15 (encourages modular design)
-/// - Complexity Score: 7.0 (composite threshold aligned with other metrics)
+/// Default values are based on industry standards and best practices:
+/// - Cyclomatic Complexity: 15 (NIST 500-235 suggests 10-15 for experienced teams)
+/// - Lines of Code: 500 (pragmatic threshold for real-world projects)
+/// - Functions per file: 25 (allows well-organized modules with small, cohesive functions)
+/// - Complexity Score: 10.0 (composite threshold aligned with relaxed metrics)
+///
+/// References:
+/// - NIST SP 500-235: https://www.mccabe.com/nist/nist_pub.php
+/// - NASA SLS uses CC threshold of 20
+/// - SonarQube uses Cognitive Complexity threshold of 15
 #[derive(Debug, Clone)]
 pub struct RefactoringThresholds {
-    /// Complexity score threshold (default: 7.0)
+    /// Complexity score threshold (default: 10.0)
     pub max_complexity_score: f64,
-    /// Cyclomatic complexity threshold (default: 10, per McCabe/NIST)
+    /// Cyclomatic complexity threshold (default: 15, per NIST guidance for mature teams)
     pub max_cyclomatic_complexity: usize,
-    /// Lines of code threshold (default: 300)
+    /// Lines of code threshold (default: 500)
     pub max_lines_of_code: usize,
-    /// Functions per file threshold (default: 15)
+    /// Functions per file threshold (default: 25)
     pub max_functions: usize,
 }
 
 impl Default for RefactoringThresholds {
     fn default() -> Self {
         Self {
-            max_complexity_score: 7.0,
-            max_cyclomatic_complexity: 10,
-            max_lines_of_code: 300,
-            max_functions: 15,
+            max_complexity_score: 10.0,
+            max_cyclomatic_complexity: 15,
+            max_lines_of_code: 500,
+            max_functions: 25,
         }
     }
 }
@@ -178,10 +194,10 @@ impl RefactoringThresholds {
     /// Create thresholds from CLI arguments, using defaults for unspecified values
     pub fn from_cli(args: &crate::cli::CliArgs) -> Self {
         Self {
-            max_complexity_score: args.max_complexity_score.unwrap_or(7.0),
-            max_cyclomatic_complexity: args.max_cc.unwrap_or(10),
-            max_lines_of_code: args.max_loc.unwrap_or(300),
-            max_functions: args.max_functions_per_file.unwrap_or(15),
+            max_complexity_score: args.max_complexity_score.unwrap_or(10.0),
+            max_cyclomatic_complexity: args.max_cc.unwrap_or(15),
+            max_lines_of_code: args.max_loc.unwrap_or(500),
+            max_functions: args.max_functions_per_file.unwrap_or(25),
         }
     }
 }
@@ -642,10 +658,7 @@ fn escape_ampersands_in_jsx_text(source: &str) -> String {
             return false;
         }
 
-        match prev_non_ws_char(chars, i) {
-            Some(prev) if is_ident_char(prev) || prev == '.' || prev == ')' || prev == ']' => false,
-            _ => true,
-        }
+        !matches!(prev_non_ws_char(chars, i), Some(prev) if is_ident_char(prev) || prev == '.' || prev == ')' || prev == ']')
     }
 
     let chars: Vec<char> = source.chars().collect();
@@ -715,7 +728,11 @@ fn escape_ampersands_in_jsx_text(source: &str) -> String {
                             jsx_entry_stack.pop();
                             state = State::InExpr;
                         } else {
-                            state = if jsx_depth == 0 { State::Normal } else { State::InText };
+                            state = if jsx_depth == 0 {
+                                State::Normal
+                            } else {
+                                State::InText
+                            };
                         }
                     }
                     _ => {}
@@ -723,35 +740,33 @@ fn escape_ampersands_in_jsx_text(source: &str) -> String {
 
                 i += 1;
             }
-            State::InText => {
-                match ch {
-                    '{' => {
-                        state = State::InExpr;
-                        expr_depth = 1;
-                        out.push(ch);
-                        i += 1;
-                    }
-                    '<' if is_jsx_tag_start_in_text(&chars, i) => {
-                        state = State::InTag;
-                        tag_quote = None;
-                        tag_brace_depth = 0;
-                        out.push(ch);
-                        i += 1;
-                    }
-                    '&' => {
-                        if looks_like_entity(&chars, i) {
-                            out.push('&');
-                        } else {
-                            out.push_str("&amp;");
-                        }
-                        i += 1;
-                    }
-                    _ => {
-                        out.push(ch);
-                        i += 1;
-                    }
+            State::InText => match ch {
+                '{' => {
+                    state = State::InExpr;
+                    expr_depth = 1;
+                    out.push(ch);
+                    i += 1;
                 }
-            }
+                '<' if is_jsx_tag_start_in_text(&chars, i) => {
+                    state = State::InTag;
+                    tag_quote = None;
+                    tag_brace_depth = 0;
+                    out.push(ch);
+                    i += 1;
+                }
+                '&' => {
+                    if looks_like_entity(&chars, i) {
+                        out.push('&');
+                    } else {
+                        out.push_str("&amp;");
+                    }
+                    i += 1;
+                }
+                _ => {
+                    out.push(ch);
+                    i += 1;
+                }
+            },
             State::InExpr => {
                 if ch == '<' && is_probably_jsx_tag_start_in_normal(&chars, i) {
                     jsx_entry_stack.push(jsx_depth);

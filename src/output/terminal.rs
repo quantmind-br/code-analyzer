@@ -72,7 +72,9 @@ impl TerminalReporter {
     pub fn display_legend(&self) {
         println!();
         println!("Legend:");
-        println!("  CC    = Cyclomatic Complexity (1-5: low, 6-10: moderate, 11+: high per McCabe/NIST)");
+        println!(
+            "  CC    = Cyclomatic Complexity (1-5: low, 6-10: moderate, 11+: high per McCabe/NIST)"
+        );
         println!("  Score = Refactoring priority score (higher = more complex)");
         println!("  🔴 High priority (Score >= 7)  🟡 Medium (Score >= 4)  🟢 Low (Score < 4)");
     }
