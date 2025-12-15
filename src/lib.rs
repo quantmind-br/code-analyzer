@@ -36,10 +36,11 @@ pub mod output;
 
 // Re-export main types for convenience
 pub use analyzer::{
-    analyze_project_simple, AnalysisReport, AnalyzerEngine, FileAnalysis, LanguageManager,
-    ProjectSummary, SupportedLanguage,
+    analyze_project_simple, identify_refactoring_candidates, AnalysisReport, AnalyzerEngine,
+    FileAnalysis, LanguageManager, ProjectSummary, RefactoringCandidate, RefactoringReason,
+    SupportedLanguage,
 };
-pub use cli::{CliArgs, OutputFormat, SortBy};
+pub use cli::{CliArgs, ColorMode, OutputFormat, SortBy};
 pub use error::{AnalyzerError, Result};
 pub use output::{
     display_analysis_results, export_analysis_json, generate_dual_output, JsonExporter,

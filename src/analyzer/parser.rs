@@ -100,6 +100,100 @@ pub struct AnalysisConfig {
     pub max_file_size_mb: usize,
 }
 
+/// Reason why a file is flagged for refactoring
+#[derive(Debug, Clone, PartialEq)]
+pub enum RefactoringReason {
+    /// Complexity score is too high (score >= 10.0)
+    HighComplexityScore(f64),
+    /// Cyclomatic complexity is too high (CC >= 20)
+    HighCyclomaticComplexity(usize),
+    /// File has too many lines (lines >= 500)
+    LargeFile(usize),
+    /// File has too many functions (functions >= 20)
+    TooManyFunctions(usize),
+}
+
+impl RefactoringReason {
+    /// Get a short description of the reason
+    pub fn short_description(&self) -> &'static str {
+        match self {
+            RefactoringReason::HighComplexityScore(_) => "High Score",
+            RefactoringReason::HighCyclomaticComplexity(_) => "High CC",
+            RefactoringReason::LargeFile(_) => "Large file",
+            RefactoringReason::TooManyFunctions(_) => "Many funcs",
+        }
+    }
+}
+
+/// A file identified as a refactoring candidate
+#[derive(Debug, Clone)]
+pub struct RefactoringCandidate {
+    pub file: FileAnalysis,
+    pub reasons: Vec<RefactoringReason>,
+}
+
+impl RefactoringCandidate {
+    /// Get a comma-separated string of all reasons
+    pub fn reasons_string(&self) -> String {
+        self.reasons
+            .iter()
+            .map(|r| r.short_description())
+            .collect::<Vec<_>>()
+            .join(", ")
+    }
+}
+
+/// Identify files that are candidates for refactoring based on thresholds
+pub fn identify_refactoring_candidates(files: &[FileAnalysis]) -> Vec<RefactoringCandidate> {
+    let mut candidates = Vec::new();
+
+    for file in files {
+        let mut reasons = Vec::new();
+
+        // Check complexity score (>= 10.0 is high priority)
+        if file.complexity_score >= 10.0 {
+            reasons.push(RefactoringReason::HighComplexityScore(
+                file.complexity_score,
+            ));
+        }
+
+        // Check cyclomatic complexity (>= 20 is high)
+        if file.cyclomatic_complexity >= 20 {
+            reasons.push(RefactoringReason::HighCyclomaticComplexity(
+                file.cyclomatic_complexity,
+            ));
+        }
+
+        // Check file size (>= 500 lines is large)
+        if file.lines_of_code >= 500 {
+            reasons.push(RefactoringReason::LargeFile(file.lines_of_code));
+        }
+
+        // Check function count (>= 20 functions is a lot)
+        if file.functions >= 20 {
+            reasons.push(RefactoringReason::TooManyFunctions(file.functions));
+        }
+
+        // Only include if at least one reason
+        if !reasons.is_empty() {
+            candidates.push(RefactoringCandidate {
+                file: file.clone(),
+                reasons,
+            });
+        }
+    }
+
+    // Sort by complexity score (highest first)
+    candidates.sort_by(|a, b| {
+        b.file
+            .complexity_score
+            .partial_cmp(&a.file.complexity_score)
+            .unwrap_or(std::cmp::Ordering::Equal)
+    });
+
+    candidates
+}
+
 /// Core file parser using tree-sitter
 #[derive(Clone)]
 pub struct FileParser {

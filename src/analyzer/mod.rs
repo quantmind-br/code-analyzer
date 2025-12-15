@@ -13,8 +13,9 @@ pub mod walker;
 
 pub use language::{LanguageManager, SupportedLanguage};
 pub use parser::{
-    create_project_summary, AnalysisConfig, AnalysisReport, FileAnalysis, FileAnalysisResult,
-    FileParser, ProjectSummary,
+    create_project_summary, identify_refactoring_candidates, AnalysisConfig, AnalysisReport,
+    FileAnalysis, FileAnalysisResult, FileParser, ProjectSummary, RefactoringCandidate,
+    RefactoringReason,
 };
 pub use walker::{create_walker_from_cli, FileWalker, FilterConfig, WalkStats};
 

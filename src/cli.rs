@@ -1,6 +1,18 @@
 use clap::{Parser, ValueEnum};
 use std::path::PathBuf;
 
+/// Color output mode
+#[derive(Debug, Clone, Copy, PartialEq, ValueEnum, Default)]
+pub enum ColorMode {
+    /// Auto-detect based on terminal (TTY)
+    #[default]
+    Auto,
+    /// Always use colors
+    Always,
+    /// Never use colors (for piping)
+    Never,
+}
+
 /// CLI arguments for the code analyzer application
 #[derive(Parser)]
 #[command(name = "code-analyzer")]
@@ -35,7 +47,7 @@ pub struct CliArgs {
     pub min_classes: Option<usize>,
 
     /// Sort results by the specified criteria
-    #[arg(long, value_enum, default_value_t = SortBy::Lines, help = "Sort output by specified metric")]
+    #[arg(long, value_enum, default_value_t = SortBy::Complexity, help = "Sort output by specified metric")]
     pub sort: SortBy,
 
     /// Output format selection
@@ -92,10 +104,19 @@ pub struct CliArgs {
     /// Show only top N results in terminal output
     #[arg(
         long,
-        default_value_t = 50,
+        default_value_t = 10,
         help = "Limit terminal output to top N results"
     )]
     pub limit: usize,
+
+    /// Color output mode
+    #[arg(
+        long,
+        value_enum,
+        default_value_t = ColorMode::Auto,
+        help = "Control color output (auto, always, never)"
+    )]
+    pub color: ColorMode,
 }
 
 /// Sorting criteria for analysis results
@@ -233,6 +254,15 @@ impl CliArgs {
     pub fn max_file_size_bytes(&self) -> u64 {
         self.max_file_size_mb as u64 * 1024 * 1024
     }
+
+    /// Determine if colors should be used based on ColorMode and TTY detection
+    pub fn should_use_colors(&self) -> bool {
+        match self.color {
+            ColorMode::Always => true,
+            ColorMode::Never => false,
+            ColorMode::Auto => atty::is(atty::Stream::Stdout),
+        }
+    }
 }
 
 #[cfg(test)]
@@ -243,12 +273,12 @@ mod tests {
     fn test_cli_args_defaults() {
         let args = CliArgs::parse_from(&["code-analyzer"]);
         assert_eq!(args.min_lines, 1);
-        assert!(matches!(args.sort, SortBy::Lines));
+        assert!(matches!(args.sort, SortBy::Complexity));
         assert!(matches!(args.output, OutputFormat::Table));
         assert!(!args.json_only);
         assert!(!args.verbose);
         assert_eq!(args.max_file_size_mb, 10);
-        assert_eq!(args.limit, 50);
+        assert_eq!(args.limit, 10);
     }
 
     #[test]
@@ -453,7 +483,7 @@ impl Default for CliArgs {
             max_lines: None,
             min_functions: None,
             min_classes: None,
-            sort: SortBy::Lines,
+            sort: SortBy::Complexity,
             output: OutputFormat::Table,
             json_only: false,
             verbose: false,
@@ -463,7 +493,8 @@ impl Default for CliArgs {
             max_file_size_mb: 10,
             compact: false,
             output_file: None,
-            limit: 50,
+            limit: 10,
+            color: ColorMode::Auto,
         }
     }
 }

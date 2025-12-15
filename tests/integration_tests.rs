@@ -3,7 +3,7 @@ use tempfile::TempDir;
 
 use code_analyzer::{
     analyze_directory, analyze_directory_filtered, run_analysis_with_config, AnalysisConfig,
-    CliArgs, OutputFormat, SortBy, SupportedLanguage,
+    CliArgs, ColorMode, OutputFormat, SortBy, SupportedLanguage,
 };
 
 /// Create a test project with various source files
@@ -371,6 +371,7 @@ fn test_cli_integration() {
         output_file: None,
         verbose: false,
         json_only: false,
+        color: ColorMode::Auto,
     };
 
     let result = code_analyzer::run_analysis(cli_args);
@@ -399,6 +400,7 @@ fn test_json_output() {
         verbose: false,
         exclude: vec![],
         json_only: false,
+        color: ColorMode::Auto,
     };
 
     let result = code_analyzer::run_analysis(cli_args);
@@ -442,6 +444,7 @@ fn test_both_output_formats() {
         exclude: vec![],
         verbose: true,
         json_only: false,
+        color: ColorMode::Auto,
     };
 
     let result = code_analyzer::run_analysis(cli_args);

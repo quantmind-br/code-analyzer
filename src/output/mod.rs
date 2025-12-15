@@ -29,9 +29,12 @@ impl OutputManager {
 
     /// Create an output manager configured from CLI arguments
     pub fn from_cli_args(args: &CliArgs) -> Self {
-        let terminal_reporter = TerminalReporter::new()
+        let mut terminal_reporter = TerminalReporter::new()
             .show_summary(!args.json_only)
-            .color_enabled(true); // TODO: Add CLI flag for color control
+            .color_enabled(args.should_use_colors());
+
+        // Set base path for relative path display
+        terminal_reporter = terminal_reporter.with_base_path(args.target_path());
 
         let json_exporter = JsonExporter::new().pretty_print(true); // Always use pretty print for files
 
@@ -79,12 +82,6 @@ impl OutputManager {
         self.terminal_reporter
             .display_report(report, args.sort, args.limit)?;
 
-        // Show additional top files if summary is enabled
-        if self.show_summary {
-            println!();
-            self.terminal_reporter.display_top_files(&report.summary)?;
-        }
-
         Ok(())
     }
 
@@ -92,25 +89,20 @@ impl OutputManager {
     pub fn generate_json_output(&self, report: &AnalysisReport, args: &CliArgs) -> Result<()> {
         let output_path = args.json_output_path();
 
-        // Apply sorting and filtering if needed
-        if args.sort != SortBy::Lines || args.limit != 50 {
-            // Create filtered report
-            self.json_exporter.export_filtered_report(
-                report,
-                &output_path,
-                args.sort,
-                Some(args.limit),
-                if args.min_lines > 1 {
-                    Some(args.min_lines)
-                } else {
-                    None
-                },
-                args.min_functions,
-            )?;
-        } else {
-            // Export full report
-            self.json_exporter.export_to_file(report, &output_path)?;
-        }
+        // Always apply sorting and filtering based on CLI args
+        // This ensures consistent behavior with terminal output
+        self.json_exporter.export_filtered_report(
+            report,
+            &output_path,
+            args.sort,
+            Some(args.limit),
+            if args.min_lines > 1 {
+                Some(args.min_lines)
+            } else {
+                None
+            },
+            args.min_functions,
+        )?;
 
         Ok(())
     }
@@ -175,13 +167,22 @@ impl Default for OutputManager {
 // Extension trait for TerminalReporter to support cloning with config
 trait TerminalReporterExt {
     fn clone_with_config(&self, show_summary: bool, color_enabled: bool) -> TerminalReporter;
+    fn base_path(&self) -> Option<std::path::PathBuf>;
 }
 
 impl TerminalReporterExt for TerminalReporter {
     fn clone_with_config(&self, show_summary: bool, color_enabled: bool) -> TerminalReporter {
-        TerminalReporter::new()
+        let mut reporter = TerminalReporter::new()
             .show_summary(show_summary)
-            .color_enabled(color_enabled)
+            .color_enabled(color_enabled);
+        if let Some(base) = self.base_path() {
+            reporter = reporter.with_base_path(base);
+        }
+        reporter
+    }
+
+    fn base_path(&self) -> Option<std::path::PathBuf> {
+        self.get_base_path().cloned()
     }
 }
 
