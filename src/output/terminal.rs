@@ -728,6 +728,7 @@ mod tests {
             file_path: PathBuf::from("test.rs"),
             warning_type: crate::error::WarningType::SyntaxError,
             message: "Parse error".to_string(),
+            locations: Vec::new(),
         }];
         let result = reporter.display_warnings(&warnings);
         assert!(result.is_ok());
@@ -737,6 +738,7 @@ mod tests {
             file_path: PathBuf::from("test.py"),
             warning_type: crate::error::WarningType::EncodingError,
             message: "Invalid encoding".to_string(),
+            locations: Vec::new(),
         }];
         let result = reporter.display_warnings(&warnings);
         assert!(result.is_ok());
@@ -746,6 +748,7 @@ mod tests {
             file_path: PathBuf::from("test.js"),
             warning_type: crate::error::WarningType::PartialParse,
             message: "Incomplete parse".to_string(),
+            locations: Vec::new(),
         }];
         let result = reporter.display_warnings(&warnings);
         assert!(result.is_ok());
@@ -756,11 +759,13 @@ mod tests {
                 file_path: PathBuf::from("test1.rs"),
                 warning_type: crate::error::WarningType::SyntaxError,
                 message: "Error 1".to_string(),
+                locations: Vec::new(),
             },
             ParseWarning {
                 file_path: PathBuf::from("test2.py"),
                 warning_type: crate::error::WarningType::EncodingError,
                 message: "Error 2".to_string(),
+                locations: Vec::new(),
             },
         ];
         let result = reporter.display_warnings(&warnings);

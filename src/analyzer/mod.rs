@@ -189,6 +189,21 @@ impl AnalyzerEngine {
                 Ok(result) => {
                     results.lock().unwrap().push(result.analysis);
                     if !result.warnings.is_empty() {
+                        if show_progress {
+                            for warning in &result.warnings {
+                                eprintln!("Warning: {}", warning);
+                                for loc in warning.locations.iter().take(3) {
+                                    if let Some(snippet) = &loc.snippet {
+                                        eprintln!(
+                                            "  at {}:{} ({})  {}",
+                                            loc.line, loc.column, loc.kind, snippet
+                                        );
+                                    } else {
+                                        eprintln!("  at {}:{} ({})", loc.line, loc.column, loc.kind);
+                                    }
+                                }
+                            }
+                        }
                         warnings.lock().unwrap().extend(result.warnings);
                     }
                 }

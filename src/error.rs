@@ -11,6 +11,19 @@ pub struct ParseWarning {
     pub warning_type: WarningType,
     /// Descriptive message
     pub message: String,
+    /// Optional parse error locations (best-effort)
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub locations: Vec<ParseWarningLocation>,
+}
+
+/// Best-effort location info for a parse warning
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ParseWarningLocation {
+    pub line: usize,
+    pub column: usize,
+    pub kind: String,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub snippet: Option<String>,
 }
 
 /// Types of parse warnings
@@ -31,6 +44,7 @@ impl ParseWarning {
             file_path: path.into(),
             warning_type: WarningType::SyntaxError,
             message: message.into(),
+            locations: Vec::new(),
         }
     }
 
@@ -40,6 +54,7 @@ impl ParseWarning {
             file_path: path.into(),
             warning_type: WarningType::PartialParse,
             message: message.into(),
+            locations: Vec::new(),
         }
     }
 
@@ -49,6 +64,7 @@ impl ParseWarning {
             file_path: path.into(),
             warning_type: WarningType::EncodingError,
             message: message.into(),
+            locations: Vec::new(),
         }
     }
 }
@@ -233,6 +249,7 @@ mod tests {
         assert_eq!(warning.file_path, PathBuf::from("test.rs"));
         assert!(matches!(warning.warning_type, WarningType::SyntaxError));
         assert_eq!(warning.message, "Parse error message");
+        assert!(warning.locations.is_empty());
     }
 
     #[test]
@@ -241,6 +258,7 @@ mod tests {
         assert_eq!(warning.file_path, PathBuf::from("test.py"));
         assert!(matches!(warning.warning_type, WarningType::PartialParse));
         assert_eq!(warning.message, "Incomplete parse");
+        assert!(warning.locations.is_empty());
     }
 
     #[test]
@@ -249,6 +267,7 @@ mod tests {
         assert_eq!(warning.file_path, PathBuf::from("test.js"));
         assert!(matches!(warning.warning_type, WarningType::EncodingError));
         assert_eq!(warning.message, "Invalid UTF-8");
+        assert!(warning.locations.is_empty());
     }
 
     #[test]
