@@ -7,15 +7,17 @@ use std::sync::{Arc, Mutex};
 use crate::cli::CliArgs;
 use crate::error::{AnalyzerError, ParseWarning, Result};
 
+pub mod git;
 pub mod language;
 pub mod parser;
 pub mod walker;
 
+pub use git::{get_changed_files, get_repo_root, is_git_repository};
 pub use language::{LanguageManager, SupportedLanguage};
 pub use parser::{
     create_project_summary, identify_refactoring_candidates, AnalysisConfig, AnalysisReport,
     FileAnalysis, FileAnalysisResult, FileParser, ProjectSummary, RefactoringCandidate,
-    RefactoringReason,
+    RefactoringReason, RefactoringThresholds,
 };
 pub use walker::{create_walker_from_cli, FileWalker, FilterConfig, WalkStats};
 
@@ -81,8 +83,12 @@ impl AnalyzerEngine {
             println!("Starting analysis of: {}", target_path.display());
         }
 
-        // Step 1: Discover files
-        let (files, walk_stats) = self.file_walker.discover_files(target_path)?;
+        // Step 1: Discover files (with optional git filtering)
+        let (files, walk_stats) = if let Some(ref commit_ref) = cli_args.only_changed_since {
+            self.discover_git_changed_files(target_path, commit_ref)?
+        } else {
+            self.file_walker.discover_files(target_path)?
+        };
 
         if self.show_progress {
             println!("Discovered {} files to analyze", files.len());
@@ -268,6 +274,51 @@ impl AnalyzerEngine {
             LanguageManager::with_languages(self.language_manager.enabled_languages()),
             size_mb,
         );
+    }
+
+    /// Discover only files changed since a git commit
+    fn discover_git_changed_files<P: AsRef<Path>>(
+        &self,
+        target_path: P,
+        commit_ref: &str,
+    ) -> Result<(Vec<std::path::PathBuf>, WalkStats)> {
+        let target_path = target_path.as_ref();
+
+        if self.show_progress {
+            println!("Git mode: analyzing files changed since '{}'", commit_ref);
+        }
+
+        // Get changed files from git
+        let changed_files = git::get_changed_files(target_path, commit_ref)?;
+
+        if self.show_progress {
+            println!("Git reports {} changed files", changed_files.len());
+        }
+
+        // Filter through the normal language/size filters
+        let filtered_files: Vec<std::path::PathBuf> = changed_files
+            .into_iter()
+            .filter(|f| self.file_parser.can_parse(f))
+            .collect();
+
+        let stats = WalkStats {
+            files_found: filtered_files.len(),
+            total_entries_scanned: filtered_files.len(),
+            directories_scanned: 0,
+            files_skipped_size: 0,
+            files_skipped_language: 0,
+            files_skipped_hidden: 0,
+            errors_encountered: 0,
+        };
+
+        if self.show_progress {
+            println!(
+                "After filtering: {} supported files to analyze",
+                filtered_files.len()
+            );
+        }
+
+        Ok((filtered_files, stats))
     }
 }
 

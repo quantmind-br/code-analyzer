@@ -1,6 +1,6 @@
 use std::path::Path;
 
-use crate::analyzer::{AnalysisReport, FileAnalysis, ProjectSummary};
+use crate::analyzer::{AnalysisReport, FileAnalysis, ProjectSummary, RefactoringThresholds};
 use crate::cli::{CliArgs, OutputFormat, SortBy};
 use crate::error::{AnalyzerError, Result};
 
@@ -29,9 +29,13 @@ impl OutputManager {
 
     /// Create an output manager configured from CLI arguments
     pub fn from_cli_args(args: &CliArgs) -> Self {
+        // Create refactoring thresholds from CLI arguments
+        let thresholds = RefactoringThresholds::from_cli(args);
+
         let mut terminal_reporter = TerminalReporter::new()
             .show_summary(!args.json_only)
-            .color_enabled(args.should_use_colors());
+            .color_enabled(args.should_use_colors())
+            .with_thresholds(thresholds);
 
         // Set base path for relative path display
         terminal_reporter = terminal_reporter.with_base_path(args.target_path());
@@ -47,31 +51,54 @@ impl OutputManager {
 
     /// Generate output according to CLI arguments
     pub fn generate_output(&self, report: &AnalysisReport, args: &CliArgs) -> Result<()> {
-        // Determine what outputs to generate
-        let show_terminal = args.should_output_terminal();
-        let show_json = args.should_output_json();
-
-        if !show_terminal && !show_json {
-            return Err(AnalyzerError::validation_error(
-                "No output format specified",
-            ));
-        }
-
-        // Generate terminal output if requested
-        if show_terminal {
-            self.generate_terminal_output(report, args)?;
-        }
-
-        // Generate JSON output if requested
-        if show_json {
-            self.generate_json_output(report, args)?;
-
-            if args.verbose {
-                println!(
-                    "JSON report saved to: {}",
-                    args.json_output_path().display()
-                );
+        match args.output {
+            OutputFormat::Table => {
+                self.generate_terminal_output(report, args)?;
             }
+            OutputFormat::Json => {
+                self.generate_json_output(report, args)?;
+                if args.verbose {
+                    println!(
+                        "JSON report saved to: {}",
+                        args.json_output_path().display()
+                    );
+                }
+            }
+            OutputFormat::Both => {
+                self.generate_terminal_output(report, args)?;
+                self.generate_json_output(report, args)?;
+                if args.verbose {
+                    println!(
+                        "JSON report saved to: {}",
+                        args.json_output_path().display()
+                    );
+                }
+            }
+            OutputFormat::JsonFilesOnly => {
+                let path = args.json_output_path();
+                self.json_exporter.export_files_only(&report.files, &path)?;
+                if args.verbose {
+                    println!("Files-only JSON written to: {}", path.display());
+                }
+            }
+            OutputFormat::JsonSummaryOnly => {
+                let path = args.json_output_path();
+                self.json_exporter
+                    .export_summary_only(&report.summary, &path)?;
+                if args.verbose {
+                    println!("Summary-only JSON written to: {}", path.display());
+                }
+            }
+        }
+
+        // Handle json_only flag (legacy support)
+        if args.json_only
+            && !matches!(
+                args.output,
+                OutputFormat::Json | OutputFormat::JsonFilesOnly | OutputFormat::JsonSummaryOnly
+            )
+        {
+            self.generate_json_output(report, args)?;
         }
 
         Ok(())
@@ -168,13 +195,15 @@ impl Default for OutputManager {
 trait TerminalReporterExt {
     fn clone_with_config(&self, show_summary: bool, color_enabled: bool) -> TerminalReporter;
     fn base_path(&self) -> Option<std::path::PathBuf>;
+    fn get_thresholds(&self) -> RefactoringThresholds;
 }
 
 impl TerminalReporterExt for TerminalReporter {
     fn clone_with_config(&self, show_summary: bool, color_enabled: bool) -> TerminalReporter {
         let mut reporter = TerminalReporter::new()
             .show_summary(show_summary)
-            .color_enabled(color_enabled);
+            .color_enabled(color_enabled)
+            .with_thresholds(self.get_thresholds());
         if let Some(base) = self.base_path() {
             reporter = reporter.with_base_path(base);
         }
@@ -183,6 +212,10 @@ impl TerminalReporterExt for TerminalReporter {
 
     fn base_path(&self) -> Option<std::path::PathBuf> {
         self.get_base_path().cloned()
+    }
+
+    fn get_thresholds(&self) -> RefactoringThresholds {
+        RefactoringThresholds::default() // Fallback to default if not accessible
     }
 }
 
@@ -276,6 +309,31 @@ pub fn route_output_by_format(
             }
 
             Ok(())
+        }
+        OutputFormat::JsonFilesOnly => {
+            if let Some(path) = json_path {
+                manager.json_exporter.export_files_only(&report.files, path)
+            } else {
+                // Print to stdout
+                let json = serde_json::to_string_pretty(&report.files)
+                    .map_err(|e| AnalyzerError::validation_error(e.to_string()))?;
+                println!("{}", json);
+                Ok(())
+            }
+        }
+        OutputFormat::JsonSummaryOnly => {
+            if let Some(path) = json_path {
+                let json = serde_json::to_string_pretty(&report.summary)
+                    .map_err(|e| AnalyzerError::validation_error(e.to_string()))?;
+                std::fs::write(path, json)?;
+                Ok(())
+            } else {
+                // Print to stdout
+                let json = serde_json::to_string_pretty(&report.summary)
+                    .map_err(|e| AnalyzerError::validation_error(e.to_string()))?;
+                println!("{}", json);
+                Ok(())
+            }
         }
     }
 }

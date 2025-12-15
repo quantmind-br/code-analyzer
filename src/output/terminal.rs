@@ -1,6 +1,6 @@
 use crate::analyzer::parser::{
     identify_refactoring_candidates, AnalysisReport, FileAnalysis, ProjectSummary,
-    RefactoringCandidate,
+    RefactoringCandidate, RefactoringThresholds,
 };
 use crate::cli::SortBy;
 use crate::error::{ParseWarning, Result};
@@ -13,6 +13,7 @@ pub struct TerminalReporter {
     show_summary: bool,
     color_enabled: bool,
     base_path: Option<PathBuf>,
+    thresholds: RefactoringThresholds,
 }
 
 impl TerminalReporter {
@@ -22,6 +23,7 @@ impl TerminalReporter {
             show_summary: true,
             color_enabled: true,
             base_path: None,
+            thresholds: RefactoringThresholds::default(),
         }
     }
 
@@ -40,6 +42,12 @@ impl TerminalReporter {
     /// Set base path for relative path display
     pub fn with_base_path(mut self, path: PathBuf) -> Self {
         self.base_path = Some(path);
+        self
+    }
+
+    /// Set custom refactoring thresholds
+    pub fn with_thresholds(mut self, thresholds: RefactoringThresholds) -> Self {
+        self.thresholds = thresholds;
         self
     }
 
@@ -85,8 +93,8 @@ impl TerminalReporter {
             println!();
         }
 
-        // Identify and display refactoring candidates
-        let candidates = identify_refactoring_candidates(&report.files);
+        // Identify and display refactoring candidates using configured thresholds
+        let candidates = identify_refactoring_candidates(&report.files, &self.thresholds);
         if !candidates.is_empty() {
             self.display_refactoring_candidates(&candidates, 10)?;
         }
@@ -807,6 +815,7 @@ mod tests {
     }
 
     #[test]
+    #[allow(deprecated)]
     fn test_display_top_files() {
         let files = create_test_file_analysis();
         let summary = crate::analyzer::parser::create_project_summary(&files);

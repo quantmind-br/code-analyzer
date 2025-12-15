@@ -38,7 +38,7 @@ pub mod output;
 pub use analyzer::{
     analyze_project_simple, identify_refactoring_candidates, AnalysisReport, AnalyzerEngine,
     FileAnalysis, LanguageManager, ProjectSummary, RefactoringCandidate, RefactoringReason,
-    SupportedLanguage,
+    RefactoringThresholds, SupportedLanguage,
 };
 pub use cli::{CliArgs, ColorMode, OutputFormat, SortBy};
 pub use error::{AnalyzerError, Result};
@@ -126,6 +126,59 @@ pub fn run_analysis(args: CliArgs) -> Result<()> {
     }
 
     Ok(())
+}
+
+/// Run analysis and return the report (for CI mode and programmatic use)
+///
+/// This function performs the full analysis workflow and returns the report,
+/// allowing callers to inspect results for CI/CD integration.
+pub fn run_analysis_returning_report(args: CliArgs) -> Result<AnalysisReport> {
+    // Validate CLI arguments
+    args.validate()?;
+
+    if args.verbose {
+        println!("Starting code analysis...");
+        println!("Target: {}", args.target_path().display());
+
+        if !args.languages.is_empty() {
+            println!("Languages: {}", args.languages.join(", "));
+        }
+
+        println!("Min lines: {}", args.min_lines);
+        if let Some(max_lines) = args.max_lines {
+            println!("Max lines: {max_lines}");
+        }
+
+        println!("Output format: {}", args.output);
+        println!();
+    }
+
+    // Create and configure analyzer engine
+    let mut analyzer = AnalyzerEngine::from_cli_args(&args)?;
+
+    // Run the analysis
+    let report = analyzer.analyze_project(args.target_path(), &args)?;
+
+    // Generate output based on compact mode or normal mode
+    if args.compact {
+        // Compact output: minimal table for CI/CD
+        output::display_compact_table(&report.files, args.sort, args.limit);
+    } else {
+        // Normal output: full report with summary
+        let output_manager = OutputManager::from_cli_args(&args);
+        output_manager.generate_output(&report, &args)?;
+    }
+
+    if args.verbose {
+        println!();
+        println!("Analysis completed successfully!");
+        println!("Files analyzed: {}", report.files.len());
+        println!("Total lines: {}", report.summary.total_lines);
+        println!("Total functions: {}", report.summary.total_functions);
+        println!("Total classes: {}", report.summary.total_classes);
+    }
+
+    Ok(report)
 }
 
 /// Run analysis with custom configuration
@@ -443,8 +496,6 @@ mod tests {
 
     #[test]
     fn test_run_analysis_with_verbose_and_max_lines() {
-        use std::path::PathBuf;
-
         let temp_dir = create_test_project();
         let args = CliArgs {
             path: Some(temp_dir.path().to_path_buf()),

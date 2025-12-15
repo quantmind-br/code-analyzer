@@ -117,6 +117,64 @@ pub struct CliArgs {
         help = "Control color output (auto, always, never)"
     )]
     pub color: ColorMode,
+
+    // === Phase 1: Custom Refactoring Thresholds ===
+    /// Maximum complexity score threshold for refactoring candidates
+    #[arg(
+        long,
+        value_name = "SCORE",
+        help = "Complexity score threshold for refactoring candidates (default: 10.0)"
+    )]
+    pub max_complexity_score: Option<f64>,
+
+    /// Maximum cyclomatic complexity threshold
+    #[arg(
+        long,
+        value_name = "CC",
+        help = "Cyclomatic complexity threshold for refactoring candidates (default: 20)"
+    )]
+    pub max_cc: Option<usize>,
+
+    /// Maximum lines of code threshold for refactoring candidates
+    #[arg(
+        long,
+        value_name = "LINES",
+        help = "Lines of code threshold for large file detection (default: 500)"
+    )]
+    pub max_loc: Option<usize>,
+
+    /// Maximum functions per file threshold
+    #[arg(
+        long,
+        value_name = "COUNT",
+        help = "Function count threshold for refactoring candidates (default: 20)"
+    )]
+    pub max_functions_per_file: Option<usize>,
+
+    // === Phase 2: Git Integration ===
+    /// Only analyze files changed since the specified git commit
+    #[arg(
+        long,
+        value_name = "COMMIT",
+        help = "Only analyze files changed since this commit (e.g., HEAD~1, main, abc123)"
+    )]
+    pub only_changed_since: Option<String>,
+
+    // === Phase 4: CI Mode ===
+    /// CI mode: exit with code 2 if refactoring candidates found
+    #[arg(
+        long,
+        help = "CI mode: exit code 2 if refactoring candidates exceed threshold"
+    )]
+    pub ci: bool,
+
+    /// Maximum allowed candidates in CI mode before failing
+    #[arg(
+        long,
+        default_value_t = 0,
+        help = "Max allowed refactoring candidates in CI mode (0 = any triggers exit code 2)"
+    )]
+    pub ci_max_candidates: usize,
 }
 
 /// Sorting criteria for analysis results
@@ -150,14 +208,20 @@ impl std::fmt::Display for SortBy {
 }
 
 /// Output format options
-#[derive(Debug, Clone, ValueEnum)]
+#[derive(Debug, Clone, PartialEq, ValueEnum)]
 pub enum OutputFormat {
     /// Terminal table output only
     Table,
-    /// JSON output only
+    /// JSON output only (full report)
     Json,
     /// Both terminal table and JSON output
     Both,
+    /// JSON with only file analysis data (no summary/config)
+    #[value(name = "json-files-only")]
+    JsonFilesOnly,
+    /// JSON with only project summary (no individual files)
+    #[value(name = "json-summary-only")]
+    JsonSummaryOnly,
 }
 
 impl std::fmt::Display for OutputFormat {
@@ -166,6 +230,8 @@ impl std::fmt::Display for OutputFormat {
             OutputFormat::Table => write!(f, "table"),
             OutputFormat::Json => write!(f, "json"),
             OutputFormat::Both => write!(f, "both"),
+            OutputFormat::JsonFilesOnly => write!(f, "json-files-only"),
+            OutputFormat::JsonSummaryOnly => write!(f, "json-summary-only"),
         }
     }
 }
@@ -242,7 +308,13 @@ impl CliArgs {
 
     /// Check if JSON output should be generated
     pub fn should_output_json(&self) -> bool {
-        matches!(self.output, OutputFormat::Json | OutputFormat::Both) || self.json_only
+        matches!(
+            self.output,
+            OutputFormat::Json
+                | OutputFormat::Both
+                | OutputFormat::JsonFilesOnly
+                | OutputFormat::JsonSummaryOnly
+        ) || self.json_only
     }
 
     /// Check if terminal output should be displayed
@@ -495,6 +567,16 @@ impl Default for CliArgs {
             output_file: None,
             limit: 10,
             color: ColorMode::Auto,
+            // Phase 1: Custom thresholds (None = use defaults)
+            max_complexity_score: None,
+            max_cc: None,
+            max_loc: None,
+            max_functions_per_file: None,
+            // Phase 2: Git integration
+            only_changed_since: None,
+            // Phase 4: CI mode
+            ci: false,
+            ci_max_candidates: 0,
         }
     }
 }
