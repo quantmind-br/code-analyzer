@@ -9,6 +9,7 @@ pub enum SupportedLanguage {
     Rust,
     JavaScript,
     TypeScript,
+    Tsx,
     Python,
     Java,
     C,
@@ -23,6 +24,7 @@ impl SupportedLanguage {
             SupportedLanguage::Rust => tree_sitter_rust::language(),
             SupportedLanguage::JavaScript => tree_sitter_javascript::language(),
             SupportedLanguage::TypeScript => tree_sitter_typescript::language_typescript(),
+            SupportedLanguage::Tsx => tree_sitter_typescript::language_tsx(),
             SupportedLanguage::Python => tree_sitter_python::language(),
             SupportedLanguage::Java => tree_sitter_java::language(),
             SupportedLanguage::C => tree_sitter_c::language(),
@@ -37,6 +39,7 @@ impl SupportedLanguage {
             SupportedLanguage::Rust => "rust",
             SupportedLanguage::JavaScript => "javascript",
             SupportedLanguage::TypeScript => "typescript",
+            SupportedLanguage::Tsx => "typescript", // TSX is grouped with TypeScript in reports
             SupportedLanguage::Python => "python",
             SupportedLanguage::Java => "java",
             SupportedLanguage::C => "c",
@@ -51,6 +54,7 @@ impl SupportedLanguage {
             SupportedLanguage::Rust,
             SupportedLanguage::JavaScript,
             SupportedLanguage::TypeScript,
+            SupportedLanguage::Tsx,
             SupportedLanguage::Python,
             SupportedLanguage::Java,
             SupportedLanguage::C,
@@ -79,6 +83,7 @@ impl std::str::FromStr for SupportedLanguage {
             "rust" | "rs" => Ok(SupportedLanguage::Rust),
             "javascript" | "js" => Ok(SupportedLanguage::JavaScript),
             "typescript" | "ts" => Ok(SupportedLanguage::TypeScript),
+            "tsx" => Ok(SupportedLanguage::Tsx),
             "python" | "py" => Ok(SupportedLanguage::Python),
             "java" => Ok(SupportedLanguage::Java),
             "c" => Ok(SupportedLanguage::C),
@@ -144,7 +149,7 @@ impl NodeKindMapper for SupportedLanguage {
                 "arrow_function",
                 "method_definition",
             ],
-            SupportedLanguage::TypeScript => &[
+            SupportedLanguage::TypeScript | SupportedLanguage::Tsx => &[
                 "function_declaration",
                 "function_expression",
                 "arrow_function",
@@ -163,7 +168,9 @@ impl NodeKindMapper for SupportedLanguage {
         match self {
             SupportedLanguage::Rust => &["struct_item", "enum_item", "impl_item"],
             SupportedLanguage::JavaScript => &["class_declaration"],
-            SupportedLanguage::TypeScript => &["class_declaration", "interface_declaration"],
+            SupportedLanguage::TypeScript | SupportedLanguage::Tsx => {
+                &["class_declaration", "interface_declaration"]
+            }
             SupportedLanguage::Python => &["class_definition"],
             SupportedLanguage::Java => &[
                 "class_declaration",
@@ -198,7 +205,7 @@ impl NodeKindMapper for SupportedLanguage {
                 "try_statement",
                 "catch_clause",
             ],
-            SupportedLanguage::TypeScript => &[
+            SupportedLanguage::TypeScript | SupportedLanguage::Tsx => &[
                 "if_statement",
                 "for_statement",
                 "for_in_statement",
@@ -268,7 +275,7 @@ impl NodeKindMapper for SupportedLanguage {
             // Most languages use similar comment node types in tree-sitter
             SupportedLanguage::Rust => &["line_comment", "block_comment"],
             SupportedLanguage::JavaScript => &["comment"],
-            SupportedLanguage::TypeScript => &["comment"],
+            SupportedLanguage::TypeScript | SupportedLanguage::Tsx => &["comment"],
             SupportedLanguage::Python => &["comment"],
             SupportedLanguage::Java => &["line_comment", "block_comment"],
             SupportedLanguage::C => &["comment"],
@@ -287,7 +294,9 @@ impl NodeKindMapper for SupportedLanguage {
             // Note: tree-sitter marks all as function_item, we rely on parent context
             SupportedLanguage::Rust => &[], // Rust doesn't distinguish at node level
             SupportedLanguage::JavaScript => &["method_definition"],
-            SupportedLanguage::TypeScript => &["method_definition", "method_signature"],
+            SupportedLanguage::TypeScript | SupportedLanguage::Tsx => {
+                &["method_definition", "method_signature"]
+            }
             SupportedLanguage::Python => &[], // Python uses function_definition for both
             SupportedLanguage::Java => &["method_declaration"],
             SupportedLanguage::C => &[], // C doesn't have methods
@@ -363,7 +372,8 @@ impl LanguageManager {
         let language = match extension.as_str() {
             "rs" => SupportedLanguage::Rust,
             "js" | "jsx" | "mjs" | "cjs" => SupportedLanguage::JavaScript,
-            "ts" | "tsx" => SupportedLanguage::TypeScript,
+            "ts" => SupportedLanguage::TypeScript,
+            "tsx" => SupportedLanguage::Tsx,
             "py" | "pyw" | "py3" => SupportedLanguage::Python,
             "java" => SupportedLanguage::Java,
             "c" | "h" => SupportedLanguage::C,
@@ -447,6 +457,24 @@ mod tests {
             Some(SupportedLanguage::Python)
         );
         assert_eq!(manager.detect_language("test.txt"), None);
+    }
+
+    #[test]
+    fn test_tsx_detection() {
+        let manager = LanguageManager::new();
+
+        // TSX files should use the Tsx variant (with tsx grammar)
+        assert_eq!(
+            manager.detect_language("Component.tsx"),
+            Some(SupportedLanguage::Tsx)
+        );
+        // TS files should use TypeScript variant
+        assert_eq!(
+            manager.detect_language("utils.ts"),
+            Some(SupportedLanguage::TypeScript)
+        );
+        // TSX should report as "typescript" in output
+        assert_eq!(SupportedLanguage::Tsx.name(), "typescript");
     }
 
     #[test]
