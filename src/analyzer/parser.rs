@@ -143,34 +143,73 @@ impl RefactoringCandidate {
     }
 }
 
-/// Identify files that are candidates for refactoring based on thresholds
-pub fn identify_refactoring_candidates(files: &[FileAnalysis]) -> Vec<RefactoringCandidate> {
+/// Configurable thresholds for identifying refactoring candidates
+#[derive(Debug, Clone)]
+pub struct RefactoringThresholds {
+    /// Complexity score threshold (default: 10.0)
+    pub max_complexity_score: f64,
+    /// Cyclomatic complexity threshold (default: 20)
+    pub max_cyclomatic_complexity: usize,
+    /// Lines of code threshold (default: 500)
+    pub max_lines_of_code: usize,
+    /// Functions per file threshold (default: 20)
+    pub max_functions: usize,
+}
+
+impl Default for RefactoringThresholds {
+    fn default() -> Self {
+        Self {
+            max_complexity_score: 10.0,
+            max_cyclomatic_complexity: 20,
+            max_lines_of_code: 500,
+            max_functions: 20,
+        }
+    }
+}
+
+impl RefactoringThresholds {
+    /// Create thresholds from CLI arguments, using defaults for unspecified values
+    pub fn from_cli(args: &crate::cli::CliArgs) -> Self {
+        Self {
+            max_complexity_score: args.max_complexity_score.unwrap_or(10.0),
+            max_cyclomatic_complexity: args.max_cc.unwrap_or(20),
+            max_lines_of_code: args.max_loc.unwrap_or(500),
+            max_functions: args.max_functions_per_file.unwrap_or(20),
+        }
+    }
+}
+
+/// Identify files that are candidates for refactoring based on configurable thresholds
+pub fn identify_refactoring_candidates(
+    files: &[FileAnalysis],
+    thresholds: &RefactoringThresholds,
+) -> Vec<RefactoringCandidate> {
     let mut candidates = Vec::new();
 
     for file in files {
         let mut reasons = Vec::new();
 
-        // Check complexity score (>= 10.0 is high priority)
-        if file.complexity_score >= 10.0 {
+        // Check complexity score against threshold
+        if file.complexity_score >= thresholds.max_complexity_score {
             reasons.push(RefactoringReason::HighComplexityScore(
                 file.complexity_score,
             ));
         }
 
-        // Check cyclomatic complexity (>= 20 is high)
-        if file.cyclomatic_complexity >= 20 {
+        // Check cyclomatic complexity against threshold
+        if file.cyclomatic_complexity >= thresholds.max_cyclomatic_complexity {
             reasons.push(RefactoringReason::HighCyclomaticComplexity(
                 file.cyclomatic_complexity,
             ));
         }
 
-        // Check file size (>= 500 lines is large)
-        if file.lines_of_code >= 500 {
+        // Check file size against threshold
+        if file.lines_of_code >= thresholds.max_lines_of_code {
             reasons.push(RefactoringReason::LargeFile(file.lines_of_code));
         }
 
-        // Check function count (>= 20 functions is a lot)
-        if file.functions >= 20 {
+        // Check function count against threshold
+        if file.functions >= thresholds.max_functions {
             reasons.push(RefactoringReason::TooManyFunctions(file.functions));
         }
 
@@ -768,7 +807,7 @@ fn main() {
 
         // Create a minimal tree for testing
         let mut parser = tree_sitter::Parser::new();
-        parser.set_language(tree_sitter_rust::language()).unwrap();
+        parser.set_language(&tree_sitter_rust::LANGUAGE.into()).unwrap();
         let tree = parser.parse(source, None).unwrap();
         let root = tree.root_node();
 

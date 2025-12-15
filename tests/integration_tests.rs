@@ -372,6 +372,7 @@ fn test_cli_integration() {
         verbose: false,
         json_only: false,
         color: ColorMode::Auto,
+        ..Default::default()
     };
 
     let result = code_analyzer::run_analysis(cli_args);
@@ -401,6 +402,7 @@ fn test_json_output() {
         exclude: vec![],
         json_only: false,
         color: ColorMode::Auto,
+        ..Default::default()
     };
 
     let result = code_analyzer::run_analysis(cli_args);
@@ -445,6 +447,7 @@ fn test_both_output_formats() {
         verbose: true,
         json_only: false,
         color: ColorMode::Auto,
+        ..Default::default()
     };
 
     let result = code_analyzer::run_analysis(cli_args);

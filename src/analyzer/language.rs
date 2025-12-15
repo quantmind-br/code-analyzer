@@ -21,15 +21,15 @@ impl SupportedLanguage {
     /// Get the tree-sitter language grammar for this language
     pub fn get_grammar(&self) -> Language {
         match self {
-            SupportedLanguage::Rust => tree_sitter_rust::language(),
-            SupportedLanguage::JavaScript => tree_sitter_javascript::language(),
-            SupportedLanguage::TypeScript => tree_sitter_typescript::language_typescript(),
-            SupportedLanguage::Tsx => tree_sitter_typescript::language_tsx(),
-            SupportedLanguage::Python => tree_sitter_python::language(),
-            SupportedLanguage::Java => tree_sitter_java::language(),
-            SupportedLanguage::C => tree_sitter_c::language(),
-            SupportedLanguage::Cpp => tree_sitter_cpp::language(),
-            SupportedLanguage::Go => tree_sitter_go::language(),
+            SupportedLanguage::Rust => tree_sitter_rust::LANGUAGE.into(),
+            SupportedLanguage::JavaScript => tree_sitter_javascript::LANGUAGE.into(),
+            SupportedLanguage::TypeScript => tree_sitter_typescript::LANGUAGE_TYPESCRIPT.into(),
+            SupportedLanguage::Tsx => tree_sitter_typescript::LANGUAGE_TSX.into(),
+            SupportedLanguage::Python => tree_sitter_python::LANGUAGE.into(),
+            SupportedLanguage::Java => tree_sitter_java::LANGUAGE.into(),
+            SupportedLanguage::C => tree_sitter_c::LANGUAGE.into(),
+            SupportedLanguage::Cpp => tree_sitter_cpp::LANGUAGE.into(),
+            SupportedLanguage::Go => tree_sitter_go::LANGUAGE.into(),
         }
     }
 
@@ -351,7 +351,7 @@ impl LanguageManager {
         // Create parser if it doesn't exist
         if let std::collections::hash_map::Entry::Vacant(e) = self.parsers.entry(lang) {
             let mut parser = Parser::new();
-            parser.set_language(lang.get_grammar()).map_err(|e| {
+            parser.set_language(&lang.get_grammar()).map_err(|e| {
                 AnalyzerError::tree_sitter_error(format!(
                     "Failed to load {} grammar: {}",
                     lang.name(),
