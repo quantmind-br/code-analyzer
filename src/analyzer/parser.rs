@@ -144,25 +144,31 @@ impl RefactoringCandidate {
 }
 
 /// Configurable thresholds for identifying refactoring candidates
+///
+/// Default values are based on industry standards:
+/// - Cyclomatic Complexity: 10 (McCabe/NIST recommendation)
+/// - Lines of Code: 300 (common best practice for file size)
+/// - Functions per file: 15 (encourages modular design)
+/// - Complexity Score: 7.0 (composite threshold aligned with other metrics)
 #[derive(Debug, Clone)]
 pub struct RefactoringThresholds {
-    /// Complexity score threshold (default: 10.0)
+    /// Complexity score threshold (default: 7.0)
     pub max_complexity_score: f64,
-    /// Cyclomatic complexity threshold (default: 20)
+    /// Cyclomatic complexity threshold (default: 10, per McCabe/NIST)
     pub max_cyclomatic_complexity: usize,
-    /// Lines of code threshold (default: 500)
+    /// Lines of code threshold (default: 300)
     pub max_lines_of_code: usize,
-    /// Functions per file threshold (default: 20)
+    /// Functions per file threshold (default: 15)
     pub max_functions: usize,
 }
 
 impl Default for RefactoringThresholds {
     fn default() -> Self {
         Self {
-            max_complexity_score: 10.0,
-            max_cyclomatic_complexity: 20,
-            max_lines_of_code: 500,
-            max_functions: 20,
+            max_complexity_score: 7.0,
+            max_cyclomatic_complexity: 10,
+            max_lines_of_code: 300,
+            max_functions: 15,
         }
     }
 }
@@ -171,10 +177,10 @@ impl RefactoringThresholds {
     /// Create thresholds from CLI arguments, using defaults for unspecified values
     pub fn from_cli(args: &crate::cli::CliArgs) -> Self {
         Self {
-            max_complexity_score: args.max_complexity_score.unwrap_or(10.0),
-            max_cyclomatic_complexity: args.max_cc.unwrap_or(20),
-            max_lines_of_code: args.max_loc.unwrap_or(500),
-            max_functions: args.max_functions_per_file.unwrap_or(20),
+            max_complexity_score: args.max_complexity_score.unwrap_or(7.0),
+            max_cyclomatic_complexity: args.max_cc.unwrap_or(10),
+            max_lines_of_code: args.max_loc.unwrap_or(300),
+            max_functions: args.max_functions_per_file.unwrap_or(15),
         }
     }
 }

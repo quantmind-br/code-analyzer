@@ -57,11 +57,11 @@ impl TerminalReporter {
     }
 
     /// Get severity indicator based on complexity score
-    /// Score >= 10.0: High (🔴), Score >= 5.0: Medium (🟡), Score < 5.0: Low (🟢)
+    /// Score >= 7.0: High (🔴), Score >= 4.0: Medium (🟡), Score < 4.0: Low (🟢)
     pub fn get_severity_indicator(&self, score: f64) -> &'static str {
-        if score >= 10.0 {
+        if score >= 7.0 {
             "🔴"
-        } else if score >= 5.0 {
+        } else if score >= 4.0 {
             "🟡"
         } else {
             "🟢"
@@ -72,9 +72,9 @@ impl TerminalReporter {
     pub fn display_legend(&self) {
         println!();
         println!("Legend:");
-        println!("  CC    = Cyclomatic Complexity (1-10: low, 11-20: moderate, 21+: high)");
+        println!("  CC    = Cyclomatic Complexity (1-5: low, 6-10: moderate, 11+: high per McCabe/NIST)");
         println!("  Score = Refactoring priority score (higher = more complex)");
-        println!("  🔴 High priority (Score >= 10)  🟡 Medium (Score >= 5)  🟢 Low (Score < 5)");
+        println!("  🔴 High priority (Score >= 7)  🟡 Medium (Score >= 4)  🟢 Low (Score < 4)");
     }
 
     /// Display the complete analysis report
@@ -444,13 +444,13 @@ impl TerminalReporter {
     }
 
     /// Format cyclomatic complexity cell with color coding
-    /// CC of 1-10: low (green), 11-20: moderate (yellow), 21+: high (red)
+    /// CC of 1-5: low (green), 6-10: moderate (yellow), 11+: high (red) per McCabe/NIST
     fn format_cyclomatic_cell(&self, cc: usize) -> Cell {
         let cc_str = cc.to_string();
 
-        if cc <= 10 {
+        if cc <= 5 {
             Cell::new(&cc_str).style_spec("Fg")
-        } else if cc <= 20 {
+        } else if cc <= 10 {
             Cell::new(&cc_str).style_spec("Fy")
         } else {
             Cell::new(&cc_str).style_spec("Fr")
