@@ -372,48 +372,32 @@ impl TerminalReporter {
         Ok(())
     }
 
-    /// Display top files by different criteria (deprecated - use display_refactoring_candidates)
-    #[deprecated(note = "Use display_refactoring_candidates instead")]
-    pub fn display_top_files(&self, summary: &ProjectSummary) -> Result<()> {
-        if !summary.largest_files.is_empty() {
-            println!("\nTop Files by Size:");
-            let mut table = Table::new();
-            table.set_format(*format::consts::FORMAT_CLEAN);
-            table.add_row(row![bFg->"Rank", bFg->"File", bFg->"Lines", bFg->"Language"]);
-
-            for (i, file) in summary.largest_files.iter().enumerate().take(5) {
-                table.add_row(row![
-                    (i + 1).to_string(),
-                    self.format_file_path(&file.path),
-                    file.total_lines().to_string(),
-                    file.language
-                ]);
+    /// Display file discovery statistics
+    ///
+    /// Shows information about files analyzed, skipped, and directories scanned.
+    /// Only displays if there were any skipped files.
+    pub fn display_walk_stats(&self, stats: &crate::analyzer::walker::WalkStats) {
+        if stats.files_skipped_size > 0
+            || stats.files_skipped_language > 0
+            || stats.files_skipped_hidden > 0
+        {
+            println!();
+            println!("File Discovery:");
+            println!("├─ Analyzed: {}", stats.files_found);
+            if stats.files_skipped_size > 0 {
+                println!("├─ Skipped (too large): {}", stats.files_skipped_size);
             }
-            table.printstd();
-        }
-
-        if !summary.most_complex_files.is_empty() {
-            println!("\nMost Complex Files:");
-            let mut table = Table::new();
-            table.set_format(*format::consts::FORMAT_CLEAN);
-            table.add_row(
-                row![bFg->"Rank", bFg->"File", bFg->"Functions", bFg->"Classes", bFg->"CC", bFg->"Score"],
-            );
-
-            for (i, file) in summary.most_complex_files.iter().enumerate().take(5) {
-                table.add_row(row![
-                    (i + 1).to_string(),
-                    self.format_file_path(&file.path),
-                    file.functions.to_string(),
-                    file.classes.to_string(),
-                    file.cyclomatic_complexity.to_string(),
-                    format!("{:.2}", file.complexity_score)
-                ]);
+            if stats.files_skipped_language > 0 {
+                println!(
+                    "├─ Skipped (unsupported language): {}",
+                    stats.files_skipped_language
+                );
             }
-            table.printstd();
+            if stats.files_skipped_hidden > 0 {
+                println!("├─ Skipped (hidden): {}", stats.files_skipped_hidden);
+            }
+            println!("└─ Directories scanned: {}", stats.directories_scanned);
         }
-
-        Ok(())
     }
 
     /// Format file path for display (use relative paths when possible, truncate if too long)
@@ -427,7 +411,15 @@ impl TerminalReporter {
             path.to_path_buf()
         };
 
-        let path_str = display_path.display().to_string();
+        #[allow(unused_mut)]
+        let mut path_str = display_path.display().to_string();
+
+        // Normalize Windows backslashes to forward slashes for consistent display
+        #[cfg(target_os = "windows")]
+        {
+            path_str = path_str.replace('\\', "/");
+        }
+
         const MAX_PATH_LENGTH: usize = 50;
 
         if path_str.len() > MAX_PATH_LENGTH {
@@ -815,13 +807,31 @@ mod tests {
     }
 
     #[test]
-    #[allow(deprecated)]
-    fn test_display_top_files() {
-        let files = create_test_file_analysis();
-        let summary = crate::analyzer::parser::create_project_summary(&files);
-
+    fn test_display_walk_stats() {
         let reporter = TerminalReporter::new();
-        let result = reporter.display_top_files(&summary);
-        assert!(result.is_ok());
+
+        // Test with skipped files - should print something
+        let stats_with_skipped = crate::analyzer::walker::WalkStats {
+            files_found: 10,
+            total_entries_scanned: 20,
+            directories_scanned: 5,
+            files_skipped_size: 2,
+            files_skipped_language: 3,
+            files_skipped_hidden: 1,
+            errors_encountered: 0,
+        };
+        reporter.display_walk_stats(&stats_with_skipped);
+
+        // Test with no skipped files - should print nothing
+        let stats_no_skipped = crate::analyzer::walker::WalkStats {
+            files_found: 10,
+            total_entries_scanned: 10,
+            directories_scanned: 3,
+            files_skipped_size: 0,
+            files_skipped_language: 0,
+            files_skipped_hidden: 0,
+            errors_encountered: 0,
+        };
+        reporter.display_walk_stats(&stats_no_skipped);
     }
 }
