@@ -3,6 +3,247 @@ use std::collections::HashMap;
 use std::path::Path;
 use tree_sitter::{Language, Parser};
 
+struct LanguageSpec {
+    function_nodes: &'static [&'static str],
+    class_nodes: &'static [&'static str],
+    control_flow_nodes: &'static [&'static str],
+    comment_nodes: &'static [&'static str],
+    method_nodes: &'static [&'static str],
+    nesting_nodes: &'static [&'static str],
+    binary_expr_node: Option<&'static str>,
+    logical_operators: &'static [&'static str],
+}
+
+static RUST_SPEC: LanguageSpec = LanguageSpec {
+    function_nodes: &["function_item"],
+    class_nodes: &["struct_item", "enum_item", "impl_item"],
+    control_flow_nodes: &[
+        "if_expression",
+        "match_arm",
+        "for_expression",
+        "while_expression",
+        "loop_expression",
+        "if_let_expression",
+        "while_let_expression",
+    ],
+    comment_nodes: &["line_comment", "block_comment"],
+    method_nodes: &[],
+    nesting_nodes: &[
+        "if_expression",
+        "match_expression",
+        "for_expression",
+        "while_expression",
+        "loop_expression",
+    ],
+    binary_expr_node: Some("binary_expression"),
+    logical_operators: &["&&", "||"],
+};
+
+static JS_SPEC: LanguageSpec = LanguageSpec {
+    function_nodes: &[
+        "function_declaration",
+        "function_expression",
+        "arrow_function",
+        "method_definition",
+    ],
+    class_nodes: &["class_declaration"],
+    control_flow_nodes: &[
+        "if_statement",
+        "for_statement",
+        "for_in_statement",
+        "while_statement",
+        "do_statement",
+        "switch_case",
+        "switch_default",
+        "ternary_expression",
+        "try_statement",
+        "catch_clause",
+    ],
+    comment_nodes: &["comment"],
+    method_nodes: &["method_definition"],
+    nesting_nodes: &[
+        "if_statement",
+        "for_statement",
+        "while_statement",
+        "do_statement",
+        "switch_statement",
+        "try_statement",
+    ],
+    binary_expr_node: Some("binary_expression"),
+    logical_operators: &["&&", "||"],
+};
+
+static TS_SPEC: LanguageSpec = LanguageSpec {
+    function_nodes: &[
+        "function_declaration",
+        "function_expression",
+        "arrow_function",
+        "method_definition",
+        "method_signature",
+    ],
+    class_nodes: &["class_declaration", "interface_declaration"],
+    control_flow_nodes: &[
+        "if_statement",
+        "for_statement",
+        "for_in_statement",
+        "while_statement",
+        "do_statement",
+        "switch_case",
+        "switch_default",
+        "ternary_expression",
+        "try_statement",
+        "catch_clause",
+    ],
+    comment_nodes: &["comment"],
+    method_nodes: &["method_definition", "method_signature"],
+    nesting_nodes: &[
+        "if_statement",
+        "for_statement",
+        "while_statement",
+        "do_statement",
+        "switch_statement",
+        "try_statement",
+    ],
+    binary_expr_node: Some("binary_expression"),
+    logical_operators: &["&&", "||"],
+};
+
+static PYTHON_SPEC: LanguageSpec = LanguageSpec {
+    function_nodes: &["function_definition"],
+    class_nodes: &["class_definition"],
+    control_flow_nodes: &[
+        "if_statement",
+        "for_statement",
+        "while_statement",
+        "try_statement",
+        "except_clause",
+        "with_statement",
+        "conditional_expression",
+        "list_comprehension",
+        "dictionary_comprehension",
+        "set_comprehension",
+        "generator_expression",
+        "boolean_operator",
+    ],
+    comment_nodes: &["comment"],
+    method_nodes: &[],
+    nesting_nodes: &[
+        "if_statement",
+        "for_statement",
+        "while_statement",
+        "try_statement",
+        "with_statement",
+    ],
+    binary_expr_node: None,
+    logical_operators: &[],
+};
+
+static JAVA_SPEC: LanguageSpec = LanguageSpec {
+    function_nodes: &["method_declaration", "constructor_declaration"],
+    class_nodes: &[
+        "class_declaration",
+        "interface_declaration",
+        "enum_declaration",
+    ],
+    control_flow_nodes: &[
+        "if_statement",
+        "for_statement",
+        "enhanced_for_statement",
+        "while_statement",
+        "do_statement",
+        "switch_label",
+        "try_statement",
+        "catch_clause",
+        "ternary_expression",
+    ],
+    comment_nodes: &["line_comment", "block_comment"],
+    method_nodes: &["method_declaration"],
+    nesting_nodes: &[
+        "if_statement",
+        "for_statement",
+        "while_statement",
+        "do_statement",
+        "switch_expression",
+        "try_statement",
+    ],
+    binary_expr_node: Some("binary_expression"),
+    logical_operators: &["&&", "||"],
+};
+
+static C_SPEC: LanguageSpec = LanguageSpec {
+    function_nodes: &["function_definition"],
+    class_nodes: &["struct_specifier"],
+    control_flow_nodes: &[
+        "if_statement",
+        "for_statement",
+        "while_statement",
+        "do_statement",
+        "case_statement",
+        "conditional_expression",
+    ],
+    comment_nodes: &["comment"],
+    method_nodes: &[],
+    nesting_nodes: &[
+        "if_statement",
+        "for_statement",
+        "while_statement",
+        "do_statement",
+        "switch_statement",
+    ],
+    binary_expr_node: Some("binary_expression"),
+    logical_operators: &["&&", "||"],
+};
+
+static CPP_SPEC: LanguageSpec = LanguageSpec {
+    function_nodes: &["function_definition", "function_declarator"],
+    class_nodes: &["class_specifier", "struct_specifier"],
+    control_flow_nodes: &[
+        "if_statement",
+        "for_statement",
+        "for_range_loop",
+        "while_statement",
+        "do_statement",
+        "case_statement",
+        "try_statement",
+        "catch_clause",
+        "conditional_expression",
+    ],
+    comment_nodes: &["comment"],
+    method_nodes: &["function_definition"],
+    nesting_nodes: &[
+        "if_statement",
+        "for_statement",
+        "while_statement",
+        "do_statement",
+        "switch_statement",
+    ],
+    binary_expr_node: Some("binary_expression"),
+    logical_operators: &["&&", "||"],
+};
+
+static GO_SPEC: LanguageSpec = LanguageSpec {
+    function_nodes: &["function_declaration", "method_declaration"],
+    class_nodes: &["type_declaration"],
+    control_flow_nodes: &[
+        "if_statement",
+        "for_statement",
+        "expression_case",
+        "default_case",
+        "type_case",
+        "communication_case",
+    ],
+    comment_nodes: &["comment"],
+    method_nodes: &["method_declaration"],
+    nesting_nodes: &[
+        "if_statement",
+        "for_statement",
+        "switch_statement",
+        "select_statement",
+    ],
+    binary_expr_node: Some("binary_expression"),
+    logical_operators: &["&&", "||"],
+};
+
 /// Supported programming languages with their tree-sitter grammars
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum SupportedLanguage {
@@ -66,6 +307,19 @@ impl SupportedLanguage {
     /// Get language names as strings
     pub fn all_names() -> Vec<&'static str> {
         Self::all().iter().map(|lang| lang.name()).collect()
+    }
+
+    fn spec(&self) -> &'static LanguageSpec {
+        match self {
+            Self::Rust => &RUST_SPEC,
+            Self::JavaScript => &JS_SPEC,
+            Self::TypeScript | Self::Tsx => &TS_SPEC,
+            Self::Python => &PYTHON_SPEC,
+            Self::Java => &JAVA_SPEC,
+            Self::C => &C_SPEC,
+            Self::Cpp => &CPP_SPEC,
+            Self::Go => &GO_SPEC,
+        }
     }
 }
 
@@ -153,136 +407,15 @@ impl NodeKindMapper for SupportedLanguage {
     }
 
     fn function_node_kinds(&self) -> &[&str] {
-        match self {
-            SupportedLanguage::Rust => &["function_item"],
-            SupportedLanguage::JavaScript => &[
-                "function_declaration",
-                "function_expression",
-                "arrow_function",
-                "method_definition",
-            ],
-            SupportedLanguage::TypeScript | SupportedLanguage::Tsx => &[
-                "function_declaration",
-                "function_expression",
-                "arrow_function",
-                "method_definition",
-                "method_signature",
-            ],
-            SupportedLanguage::Python => &["function_definition"],
-            SupportedLanguage::Java => &["method_declaration", "constructor_declaration"],
-            SupportedLanguage::C => &["function_definition"],
-            SupportedLanguage::Cpp => &["function_definition", "function_declarator"],
-            SupportedLanguage::Go => &["function_declaration", "method_declaration"],
-        }
+        self.spec().function_nodes
     }
 
     fn class_node_kinds(&self) -> &[&str] {
-        match self {
-            SupportedLanguage::Rust => &["struct_item", "enum_item", "impl_item"],
-            SupportedLanguage::JavaScript => &["class_declaration"],
-            SupportedLanguage::TypeScript | SupportedLanguage::Tsx => {
-                &["class_declaration", "interface_declaration"]
-            }
-            SupportedLanguage::Python => &["class_definition"],
-            SupportedLanguage::Java => &[
-                "class_declaration",
-                "interface_declaration",
-                "enum_declaration",
-            ],
-            SupportedLanguage::C => &["struct_specifier"],
-            SupportedLanguage::Cpp => &["class_specifier", "struct_specifier"],
-            SupportedLanguage::Go => &["type_declaration"],
-        }
+        self.spec().class_nodes
     }
 
     fn control_flow_node_kinds(&self) -> &[&str] {
-        match self {
-            SupportedLanguage::Rust => &[
-                "if_expression",
-                "match_arm", // Each arm of a match is a decision point (not match_expression)
-                "for_expression",
-                "while_expression",
-                "loop_expression",
-                "if_let_expression",
-                "while_let_expression",
-            ],
-            SupportedLanguage::JavaScript => &[
-                "if_statement",
-                "for_statement",
-                "for_in_statement",
-                "while_statement",
-                "do_statement",
-                "switch_case", // Each case is a decision point (per industry standard)
-                "switch_default", // Default case is also a path
-                "ternary_expression",
-                "try_statement",
-                "catch_clause",
-            ],
-            SupportedLanguage::TypeScript | SupportedLanguage::Tsx => &[
-                "if_statement",
-                "for_statement",
-                "for_in_statement",
-                "while_statement",
-                "do_statement",
-                "switch_case", // Each case is a decision point (per industry standard)
-                "switch_default", // Default case is also a path
-                "ternary_expression",
-                "try_statement",
-                "catch_clause",
-            ],
-            SupportedLanguage::Python => &[
-                "if_statement",
-                "for_statement",
-                "while_statement",
-                "try_statement",
-                "except_clause",
-                "with_statement",
-                "conditional_expression",
-                "list_comprehension",
-                "dictionary_comprehension",
-                "set_comprehension",
-                "generator_expression",
-                "boolean_operator", // 'and' / 'or' operators (McCabe: compound predicates)
-            ],
-            SupportedLanguage::Java => &[
-                "if_statement",
-                "for_statement",
-                "enhanced_for_statement",
-                "while_statement",
-                "do_statement",
-                "switch_label", // Each case label is a decision point
-                "try_statement",
-                "catch_clause",
-                "ternary_expression",
-            ],
-            SupportedLanguage::C => &[
-                "if_statement",
-                "for_statement",
-                "while_statement",
-                "do_statement",
-                "case_statement", // Each case is a decision point
-                "conditional_expression",
-            ],
-            SupportedLanguage::Cpp => &[
-                "if_statement",
-                "for_statement",
-                "for_range_loop",
-                "while_statement",
-                "do_statement",
-                "case_statement", // Each case is a decision point
-                "try_statement",
-                "catch_clause",
-                "conditional_expression",
-            ],
-            SupportedLanguage::Go => &[
-                "if_statement",
-                "for_statement",
-                "expression_case",    // Each case in switch is a decision point
-                "default_case",       // Default case is also a path
-                "type_case",          // Type switch case
-                "communication_case", // Select case
-            ],
-        }
+        self.spec().control_flow_nodes
     }
 
     fn is_comment_node(&self, kind: &str) -> bool {
@@ -290,17 +423,7 @@ impl NodeKindMapper for SupportedLanguage {
     }
 
     fn comment_node_kinds(&self) -> &[&str] {
-        match self {
-            // Most languages use similar comment node types in tree-sitter
-            SupportedLanguage::Rust => &["line_comment", "block_comment"],
-            SupportedLanguage::JavaScript => &["comment"],
-            SupportedLanguage::TypeScript | SupportedLanguage::Tsx => &["comment"],
-            SupportedLanguage::Python => &["comment"],
-            SupportedLanguage::Java => &["line_comment", "block_comment"],
-            SupportedLanguage::C => &["comment"],
-            SupportedLanguage::Cpp => &["comment"],
-            SupportedLanguage::Go => &["comment"],
-        }
+        self.spec().comment_nodes
     }
 
     fn is_method_node(&self, kind: &str) -> bool {
@@ -308,20 +431,7 @@ impl NodeKindMapper for SupportedLanguage {
     }
 
     fn method_node_kinds(&self) -> &[&str] {
-        match self {
-            // Rust: functions inside impl blocks are methods
-            // Note: tree-sitter marks all as function_item, we rely on parent context
-            SupportedLanguage::Rust => &[], // Rust doesn't distinguish at node level
-            SupportedLanguage::JavaScript => &["method_definition"],
-            SupportedLanguage::TypeScript | SupportedLanguage::Tsx => {
-                &["method_definition", "method_signature"]
-            }
-            SupportedLanguage::Python => &[], // Python uses function_definition for both
-            SupportedLanguage::Java => &["method_declaration"],
-            SupportedLanguage::C => &[], // C doesn't have methods
-            SupportedLanguage::Cpp => &["function_definition"], // Methods are still function_definition
-            SupportedLanguage::Go => &["method_declaration"],
-        }
+        self.spec().method_nodes
     }
 
     fn is_binary_expression_node(&self, kind: &str) -> bool {
@@ -330,83 +440,15 @@ impl NodeKindMapper for SupportedLanguage {
     }
 
     fn binary_expression_node_kind(&self) -> Option<&'static str> {
-        match self {
-            // Python uses 'boolean_operator' which is already in control_flow_node_kinds
-            SupportedLanguage::Python => None,
-            // All C-like languages use 'binary_expression' for && and ||
-            SupportedLanguage::Rust => Some("binary_expression"),
-            SupportedLanguage::JavaScript => Some("binary_expression"),
-            SupportedLanguage::TypeScript | SupportedLanguage::Tsx => Some("binary_expression"),
-            SupportedLanguage::Java => Some("binary_expression"),
-            SupportedLanguage::C => Some("binary_expression"),
-            SupportedLanguage::Cpp => Some("binary_expression"),
-            SupportedLanguage::Go => Some("binary_expression"),
-        }
+        self.spec().binary_expr_node
     }
 
     fn logical_operators(&self) -> &[&str] {
-        match self {
-            // Python uses 'and' and 'or' but they're handled via boolean_operator node
-            SupportedLanguage::Python => &[],
-            // All C-like languages use && and ||
-            _ => &["&&", "||"],
-        }
+        self.spec().logical_operators
     }
 
     fn nesting_node_kinds(&self) -> &'static [&'static str] {
-        match self {
-            SupportedLanguage::Rust => &[
-                "if_expression",
-                "match_expression",
-                "for_expression",
-                "while_expression",
-                "loop_expression",
-            ],
-            SupportedLanguage::JavaScript => &[
-                "if_statement",
-                "for_statement",
-                "while_statement",
-                "do_statement",
-                "switch_statement",
-                "try_statement",
-            ],
-            SupportedLanguage::TypeScript | SupportedLanguage::Tsx => &[
-                "if_statement",
-                "for_statement",
-                "while_statement",
-                "do_statement",
-                "switch_statement",
-                "try_statement",
-            ],
-            SupportedLanguage::Python => &[
-                "if_statement",
-                "for_statement",
-                "while_statement",
-                "try_statement",
-                "with_statement",
-            ],
-            SupportedLanguage::Java => &[
-                "if_statement",
-                "for_statement",
-                "while_statement",
-                "do_statement",
-                "switch_expression",
-                "try_statement",
-            ],
-            SupportedLanguage::C | SupportedLanguage::Cpp => &[
-                "if_statement",
-                "for_statement",
-                "while_statement",
-                "do_statement",
-                "switch_statement",
-            ],
-            SupportedLanguage::Go => &[
-                "if_statement",
-                "for_statement",
-                "switch_statement",
-                "select_statement",
-            ],
-        }
+        self.spec().nesting_nodes
     }
 }
 
@@ -644,5 +686,84 @@ mod tests {
     fn test_language_display() {
         assert_eq!(SupportedLanguage::Rust.to_string(), "rust");
         assert_eq!(SupportedLanguage::JavaScript.to_string(), "javascript");
+    }
+
+    /// Characterization test: ensures all NodeKindMapper methods return non-empty
+    /// results for all 9 languages. Guards against regressions during refactoring.
+    #[test]
+    fn test_node_kind_mapper_all_languages() {
+        for lang in SupportedLanguage::all() {
+            // function_node_kinds - all languages should have at least one
+            let fn_kinds = lang.function_node_kinds();
+            assert!(
+                !fn_kinds.is_empty(),
+                "{:?} should have function_node_kinds",
+                lang
+            );
+
+            // class_node_kinds - all languages should have at least one
+            let class_kinds = lang.class_node_kinds();
+            assert!(
+                !class_kinds.is_empty(),
+                "{:?} should have class_node_kinds",
+                lang
+            );
+
+            // control_flow_node_kinds - all languages should have at least one
+            let cf_kinds = lang.control_flow_node_kinds();
+            assert!(
+                !cf_kinds.is_empty(),
+                "{:?} should have control_flow_node_kinds",
+                lang
+            );
+
+            // comment_node_kinds - all languages should have at least one
+            let comment_kinds = lang.comment_node_kinds();
+            assert!(
+                !comment_kinds.is_empty(),
+                "{:?} should have comment_node_kinds",
+                lang
+            );
+
+            // method_node_kinds - can be empty for some languages (Rust, Python, C)
+            // Just ensure it doesn't panic
+            let _method_kinds = lang.method_node_kinds();
+
+            // nesting_node_kinds - all languages should have at least one
+            let nesting_kinds = lang.nesting_node_kinds();
+            assert!(
+                !nesting_kinds.is_empty(),
+                "{:?} should have nesting_node_kinds",
+                lang
+            );
+
+            // binary_expression_node_kind - Python returns None, others return Some
+            let bin_expr = lang.binary_expression_node_kind();
+            if lang != SupportedLanguage::Python {
+                assert!(
+                    bin_expr.is_some(),
+                    "{:?} should have binary_expression_node_kind",
+                    lang
+                );
+            }
+
+            // logical_operators - Python returns empty, others return ["&&", "||"]
+            let logical_ops = lang.logical_operators();
+            if lang != SupportedLanguage::Python {
+                assert!(
+                    !logical_ops.is_empty(),
+                    "{:?} should have logical_operators",
+                    lang
+                );
+            }
+
+            // is_* methods - just ensure they don't panic
+            let _ = lang.is_function_node("test");
+            let _ = lang.is_class_node("test");
+            let _ = lang.is_control_flow_node("test");
+            let _ = lang.is_comment_node("test");
+            let _ = lang.is_method_node("test");
+            let _ = lang.is_binary_expression_node("test");
+        }
     }
 }
