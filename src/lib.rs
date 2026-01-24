@@ -47,6 +47,34 @@ pub use output::{
     OutputManager, TerminalReporter,
 };
 
+/// Internal helper that performs core analysis logic shared by public functions
+fn execute_analysis_core(args: &CliArgs) -> Result<AnalysisReport> {
+    args.validate()?;
+
+    if args.verbose {
+        println!("Starting code analysis...");
+        println!("Target: {}", args.target_path().display());
+
+        if !args.languages.is_empty() {
+            println!("Languages: {}", args.languages.join(", "));
+        }
+
+        println!("Min lines: {}", args.min_lines);
+        if let Some(max_lines) = args.max_lines {
+            println!("Max lines: {max_lines}");
+        }
+
+        println!("Output format: {}", args.output);
+        println!();
+    }
+
+    // Create and configure analyzer engine
+    let mut analyzer = AnalyzerEngine::from_cli_args(args)?;
+
+    // Run the analysis
+    analyzer.analyze_project(args.target_path(), args)
+}
+
 /// Main entry point for running code analysis
 ///
 /// This function orchestrates the complete analysis workflow:
@@ -80,38 +108,11 @@ pub use output::{
 /// run_analysis(args).expect("Analysis failed");
 /// ```
 pub fn run_analysis(args: CliArgs) -> Result<()> {
-    // Validate CLI arguments
-    args.validate()?;
+    let report = execute_analysis_core(&args)?;
 
-    if args.verbose {
-        println!("Starting code analysis...");
-        println!("Target: {}", args.target_path().display());
-
-        if !args.languages.is_empty() {
-            println!("Languages: {}", args.languages.join(", "));
-        }
-
-        println!("Min lines: {}", args.min_lines);
-        if let Some(max_lines) = args.max_lines {
-            println!("Max lines: {max_lines}");
-        }
-
-        println!("Output format: {}", args.output);
-        println!();
-    }
-
-    // Create and configure analyzer engine
-    let mut analyzer = AnalyzerEngine::from_cli_args(&args)?;
-
-    // Run the analysis
-    let report = analyzer.analyze_project(args.target_path(), &args)?;
-
-    // Generate output based on compact mode or normal mode
     if args.compact {
-        // Compact output: minimal table for CI/CD
         output::display_compact_table(&report.files, args.sort, args.limit);
     } else {
-        // Normal output: full report with summary
         let output_manager = OutputManager::from_cli_args(&args);
         output_manager.generate_output(&report, &args)?;
     }
@@ -133,38 +134,11 @@ pub fn run_analysis(args: CliArgs) -> Result<()> {
 /// This function performs the full analysis workflow and returns the report,
 /// allowing callers to inspect results for CI/CD integration.
 pub fn run_analysis_returning_report(args: CliArgs) -> Result<AnalysisReport> {
-    // Validate CLI arguments
-    args.validate()?;
+    let report = execute_analysis_core(&args)?;
 
-    if args.verbose {
-        println!("Starting code analysis...");
-        println!("Target: {}", args.target_path().display());
-
-        if !args.languages.is_empty() {
-            println!("Languages: {}", args.languages.join(", "));
-        }
-
-        println!("Min lines: {}", args.min_lines);
-        if let Some(max_lines) = args.max_lines {
-            println!("Max lines: {max_lines}");
-        }
-
-        println!("Output format: {}", args.output);
-        println!();
-    }
-
-    // Create and configure analyzer engine
-    let mut analyzer = AnalyzerEngine::from_cli_args(&args)?;
-
-    // Run the analysis
-    let report = analyzer.analyze_project(args.target_path(), &args)?;
-
-    // Generate output based on compact mode or normal mode
     if args.compact {
-        // Compact output: minimal table for CI/CD
         output::display_compact_table(&report.files, args.sort, args.limit);
     } else {
-        // Normal output: full report with summary
         let output_manager = OutputManager::from_cli_args(&args);
         output_manager.generate_output(&report, &args)?;
     }

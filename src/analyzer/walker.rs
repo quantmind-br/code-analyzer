@@ -106,11 +106,9 @@ impl FileWalker {
             return Err(AnalyzerError::invalid_path(root_path));
         }
 
-        if !root_path.is_dir() {
-            return Err(AnalyzerError::validation_error(format!(
-                "Path must be a directory: {}",
-                root_path.display()
-            )));
+        // Handle single file analysis
+        if root_path.is_file() {
+            return self.discover_single_file(root_path);
         }
 
         // Set up the ignore walker
@@ -147,7 +145,7 @@ impl FileWalker {
             let language_manager = &self.language_manager;
 
             Box::new(move |result| {
-                let mut stats_guard = stats.lock().unwrap();
+                let mut stats_guard = stats.lock().expect("walk stats mutex poisoned");
                 stats_guard.total_entries_scanned += 1;
 
                 match result {
@@ -171,7 +169,10 @@ impl FileWalker {
                         // Apply file filters
                         match should_include_file(path, &filter_config, language_manager) {
                             Ok(IncludeResult::Include) => {
-                                files.lock().unwrap().push(path.to_path_buf());
+                                files
+                                    .lock()
+                                    .expect("discovered files mutex poisoned")
+                                    .push(path.to_path_buf());
                                 stats_guard.files_found += 1;
                             }
                             Ok(IncludeResult::SkipSize) => {
@@ -184,14 +185,17 @@ impl FileWalker {
                                 stats_guard.files_skipped_hidden += 1;
                             }
                             Err(e) => {
-                                errors.lock().unwrap().push(e);
+                                errors.lock().expect("walk errors mutex poisoned").push(e);
                                 stats_guard.errors_encountered += 1;
                             }
                         }
                     }
                     Err(err) => {
                         stats_guard.errors_encountered += 1;
-                        errors.lock().unwrap().push(AnalyzerError::Walk(err));
+                        errors
+                            .lock()
+                            .expect("walk errors mutex poisoned")
+                            .push(AnalyzerError::Walk(err));
                     }
                 }
 
@@ -204,11 +208,20 @@ impl FileWalker {
         }
 
         // Extract results
-        let files = Arc::try_unwrap(files).unwrap().into_inner().unwrap();
+        let files = Arc::try_unwrap(files)
+            .expect("files Arc still has multiple owners after walk completed")
+            .into_inner()
+            .expect("files mutex poisoned");
 
-        let stats = Arc::try_unwrap(stats).unwrap().into_inner().unwrap();
+        let stats = Arc::try_unwrap(stats)
+            .expect("stats Arc still has multiple owners after walk completed")
+            .into_inner()
+            .expect("stats mutex poisoned");
 
-        let errors = Arc::try_unwrap(errors).unwrap().into_inner().unwrap();
+        let errors = Arc::try_unwrap(errors)
+            .expect("errors Arc still has multiple owners after walk completed")
+            .into_inner()
+            .expect("errors mutex poisoned");
 
         // Log errors if any
         for error in &errors {
@@ -244,6 +257,34 @@ impl FileWalker {
     /// Get a reference to the filter configuration
     pub fn filter_config(&self) -> &FilterConfig {
         &self.filter_config
+    }
+
+    /// Handle single file analysis
+    fn discover_single_file(&self, file_path: &Path) -> Result<(Vec<PathBuf>, WalkStats)> {
+        let mut stats = WalkStats {
+            total_entries_scanned: 1,
+            ..Default::default()
+        };
+
+        if !self.language_manager.is_supported_file(file_path) {
+            return Err(AnalyzerError::validation_error(format!(
+                "Unsupported file type: {}. Supported extensions: .rs, .js, .jsx, .ts, .tsx, .py, .java, .c, .h, .cpp, .cc, .cxx, .hpp, .go",
+                file_path.display()
+            )));
+        }
+
+        if let Ok(metadata) = std::fs::metadata(file_path) {
+            if metadata.len() > self.filter_config.max_file_size_bytes {
+                return Err(AnalyzerError::validation_error(format!(
+                    "File too large: {} (max {} MB)",
+                    file_path.display(),
+                    self.filter_config.max_file_size_bytes / (1024 * 1024)
+                )));
+            }
+        }
+
+        stats.files_found = 1;
+        Ok((vec![file_path.to_path_buf()], stats))
     }
 
     /// Update the filter configuration
@@ -456,11 +497,27 @@ mod tests {
     }
 
     #[test]
-    fn test_discover_files_file_instead_of_directory() {
+    fn test_discover_files_single_supported_file() {
         let language_manager = LanguageManager::new();
         let walker = FileWalker::new(language_manager);
 
-        // Create a temporary file
+        let temp_file = std::env::temp_dir().join("test_file.rs");
+        std::fs::write(&temp_file, "fn main() {}").unwrap();
+
+        let result = walker.discover_files(&temp_file);
+        assert!(result.is_ok());
+        let (files, stats) = result.unwrap();
+        assert_eq!(files.len(), 1);
+        assert_eq!(stats.files_found, 1);
+
+        let _ = std::fs::remove_file(temp_file);
+    }
+
+    #[test]
+    fn test_discover_files_single_unsupported_file() {
+        let language_manager = LanguageManager::new();
+        let walker = FileWalker::new(language_manager);
+
         let temp_file = std::env::temp_dir().join("test_file.txt");
         std::fs::write(&temp_file, "test").unwrap();
 
@@ -469,7 +526,7 @@ mod tests {
         assert!(result
             .unwrap_err()
             .to_string()
-            .contains("must be a directory"));
+            .contains("Unsupported file type"));
 
         let _ = std::fs::remove_file(temp_file);
     }

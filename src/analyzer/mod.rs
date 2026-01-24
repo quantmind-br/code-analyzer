@@ -187,7 +187,10 @@ impl AnalyzerEngine {
             // Analyze single file with warnings
             match file_parser.parse_file_with_warnings(file) {
                 Ok(result) => {
-                    results.lock().unwrap().push(result.analysis);
+                    results
+                        .lock()
+                        .expect("analysis results mutex poisoned")
+                        .push(result.analysis);
                     if !result.warnings.is_empty() {
                         if show_progress {
                             for warning in &result.warnings {
@@ -207,14 +210,20 @@ impl AnalyzerEngine {
                                 }
                             }
                         }
-                        warnings.lock().unwrap().extend(result.warnings);
+                        warnings
+                            .lock()
+                            .expect("parse warnings mutex poisoned")
+                            .extend(result.warnings);
                     }
                 }
                 Err(e) => {
                     if show_progress {
                         eprintln!("Warning: Failed to analyze {}: {}", file.display(), e);
                     }
-                    errors.lock().unwrap().push((file.clone(), e));
+                    errors
+                        .lock()
+                        .expect("analysis errors mutex poisoned")
+                        .push((file.clone(), e));
                 }
             }
         });
@@ -224,9 +233,18 @@ impl AnalyzerEngine {
         }
 
         // Extract results
-        let results = Arc::try_unwrap(results).unwrap().into_inner().unwrap();
-        let warnings = Arc::try_unwrap(warnings).unwrap().into_inner().unwrap();
-        let errors = Arc::try_unwrap(errors).unwrap().into_inner().unwrap();
+        let results = Arc::try_unwrap(results)
+            .expect("results Arc still has multiple owners")
+            .into_inner()
+            .expect("results mutex poisoned");
+        let warnings = Arc::try_unwrap(warnings)
+            .expect("warnings Arc still has multiple owners")
+            .into_inner()
+            .expect("warnings mutex poisoned");
+        let errors = Arc::try_unwrap(errors)
+            .expect("errors Arc still has multiple owners")
+            .into_inner()
+            .expect("errors mutex poisoned");
 
         // Report errors if in verbose mode
         if self.show_progress && !errors.is_empty() {
