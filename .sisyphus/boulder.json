@@ -1,8 +1,8 @@
 {
-  "active_plan": "/home/diogo/dev/code-analyzer/.sisyphus/plans/code-quality-refactor.md",
-  "started_at": "2026-01-24T19:56:41.401Z",
+  "active_plan": "/home/diogo/dev/code-analyzer/.sisyphus/plans/code-quality-refactors.md",
+  "started_at": "2026-01-24T20:23:15.871Z",
   "session_ids": [
-    "ses_40ea7a079fferPdN6P7inGZ9BE"
+    "ses_40e5e63faffeECfZkZAQEOhA2h"
   ],
-  "plan_name": "code-quality-refactor"
+  "plan_name": "code-quality-refactors"
 }
