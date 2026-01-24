@@ -10,6 +10,7 @@ use crate::error::{AnalyzerError, ParseWarning, Result};
 pub mod git;
 pub mod language;
 pub mod parser;
+pub mod sanitizer;
 pub mod walker;
 
 pub use git::{get_changed_files, get_repo_root, is_git_repository};
