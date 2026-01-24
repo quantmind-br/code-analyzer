@@ -2,7 +2,6 @@ use chrono::Utc;
 use indicatif::{ProgressBar, ProgressStyle};
 use rayon::prelude::*;
 use std::path::Path;
-use std::sync::{Arc, Mutex};
 
 use crate::cli::CliArgs;
 use crate::error::{AnalyzerError, ParseWarning, Result};
@@ -158,94 +157,80 @@ impl AnalyzerEngine {
             None
         };
 
-        // Use thread-safe containers for results, warnings, and errors
-        let results = Arc::new(Mutex::new(Vec::new()));
-        let warnings = Arc::new(Mutex::new(Vec::new()));
-        let errors = Arc::new(Mutex::new(Vec::new()));
-
         let show_progress = self.show_progress;
         let max_file_size_bytes = self.file_parser.max_file_size_bytes();
+        let max_file_size_mb = (max_file_size_bytes / (1024 * 1024)) as usize;
         let enabled_languages = self.language_manager.enabled_languages();
 
-        // Parallel analysis with progress reporting
-        files.par_iter().for_each(|file| {
-            // Update progress
-            if let Some(ref pb) = progress_bar {
-                pb.set_message(format!(
-                    "Analyzing: {}",
-                    file.file_name().unwrap_or_default().to_string_lossy()
-                ));
-                pb.inc(1);
-            }
+        // Parallel analysis with thread-local parser reuse
+        let (results_with_warnings, errors): (Vec<_>, Vec<_>) = files
+            .par_iter()
+            .map_init(
+                || {
+                    // Create a thread-local parser for this thread
+                    let language_manager =
+                        LanguageManager::with_languages(enabled_languages.clone());
+                    FileParser::new(language_manager, max_file_size_mb)
+                },
+                |file_parser, file| {
+                    // Update progress
+                    if let Some(ref pb) = progress_bar {
+                        pb.set_message(format!(
+                            "Analyzing: {}",
+                            file.file_name().unwrap_or_default().to_string_lossy()
+                        ));
+                        pb.inc(1);
+                    }
 
-            // Create a thread-local parser for this file
-            let language_manager = LanguageManager::with_languages(enabled_languages.clone());
-            let mut file_parser = FileParser::new(
-                language_manager,
-                (max_file_size_bytes / (1024 * 1024)) as usize,
-            );
-
-            // Analyze single file with warnings
-            match file_parser.parse_file_with_warnings(file) {
-                Ok(result) => {
-                    results
-                        .lock()
-                        .expect("analysis results mutex poisoned")
-                        .push(result.analysis);
-                    if !result.warnings.is_empty() {
-                        if show_progress {
-                            for warning in &result.warnings {
-                                eprintln!("Warning: {}", warning);
-                                for loc in warning.locations.iter().take(3) {
-                                    if let Some(snippet) = &loc.snippet {
-                                        eprintln!(
-                                            "  at {}:{} ({})  {}",
-                                            loc.line, loc.column, loc.kind, snippet
-                                        );
-                                    } else {
-                                        eprintln!(
-                                            "  at {}:{} ({})",
-                                            loc.line, loc.column, loc.kind
-                                        );
+                    // Analyze single file with warnings
+                    match file_parser.parse_file_with_warnings(file) {
+                        Ok(result) => {
+                            if !result.warnings.is_empty() && show_progress {
+                                for warning in &result.warnings {
+                                    eprintln!("Warning: {}", warning);
+                                    for loc in warning.locations.iter().take(3) {
+                                        if let Some(snippet) = &loc.snippet {
+                                            eprintln!(
+                                                "  at {}:{} ({})  {}",
+                                                loc.line, loc.column, loc.kind, snippet
+                                            );
+                                        } else {
+                                            eprintln!(
+                                                "  at {}:{} ({})",
+                                                loc.line, loc.column, loc.kind
+                                            );
+                                        }
                                     }
                                 }
                             }
+                            Ok(result)
                         }
-                        warnings
-                            .lock()
-                            .expect("parse warnings mutex poisoned")
-                            .extend(result.warnings);
+                        Err(e) => {
+                            if show_progress {
+                                eprintln!("Warning: Failed to analyze {}: {}", file.display(), e);
+                            }
+                            Err((file.clone(), e))
+                        }
                     }
-                }
-                Err(e) => {
-                    if show_progress {
-                        eprintln!("Warning: Failed to analyze {}: {}", file.display(), e);
-                    }
-                    errors
-                        .lock()
-                        .expect("analysis errors mutex poisoned")
-                        .push((file.clone(), e));
-                }
-            }
-        });
+                },
+            )
+            .partition(|r| r.is_ok());
 
         if let Some(pb) = progress_bar {
             pb.finish_with_message("File analysis completed");
         }
 
-        // Extract results
-        let results = Arc::try_unwrap(results)
-            .expect("results Arc still has multiple owners")
-            .into_inner()
-            .expect("results mutex poisoned");
-        let warnings = Arc::try_unwrap(warnings)
-            .expect("warnings Arc still has multiple owners")
-            .into_inner()
-            .expect("warnings mutex poisoned");
-        let errors = Arc::try_unwrap(errors)
-            .expect("errors Arc still has multiple owners")
-            .into_inner()
-            .expect("errors mutex poisoned");
+        // Unzip results
+        let mut analyses = Vec::with_capacity(results_with_warnings.len());
+        let mut warnings = Vec::new();
+
+        for res in results_with_warnings {
+            let res = res.expect("partition guarantees Ok");
+            analyses.push(res.analysis);
+            warnings.extend(res.warnings);
+        }
+
+        let errors: Vec<_> = errors.into_iter().map(|r| r.unwrap_err()).collect();
 
         // Report errors if in verbose mode
         if self.show_progress && !errors.is_empty() {
@@ -255,13 +240,13 @@ impl AnalyzerEngine {
             }
         }
 
-        if results.is_empty() {
+        if analyses.is_empty() {
             return Err(AnalyzerError::validation_error(
                 "Failed to analyze any files successfully",
             ));
         }
 
-        Ok((results, warnings))
+        Ok((analyses, warnings))
     }
 
     /// Apply CLI-based filters to analysis results
