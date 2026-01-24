@@ -108,25 +108,7 @@ fn execute_analysis_core(args: &CliArgs) -> Result<AnalysisReport> {
 /// run_analysis(args).expect("Analysis failed");
 /// ```
 pub fn run_analysis(args: CliArgs) -> Result<()> {
-    let report = execute_analysis_core(&args)?;
-
-    if args.compact {
-        output::display_compact_table(&report.files, args.sort, args.limit);
-    } else {
-        let output_manager = OutputManager::from_cli_args(&args);
-        output_manager.generate_output(&report, &args)?;
-    }
-
-    if args.verbose {
-        println!();
-        println!("Analysis completed successfully!");
-        println!("Files analyzed: {}", report.files.len());
-        println!("Total lines: {}", report.summary.total_lines);
-        println!("Total functions: {}", report.summary.total_functions);
-        println!("Total classes: {}", report.summary.total_classes);
-    }
-
-    Ok(())
+    run_analysis_returning_report(args).map(|_| ())
 }
 
 /// Run analysis and return the report (for CI mode and programmatic use)
