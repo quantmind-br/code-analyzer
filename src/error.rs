@@ -112,6 +112,9 @@ pub enum AnalyzerError {
     /// Walk/traversal errors from the ignore crate
     Walk(ignore::Error),
 
+    /// CSV serialization errors
+    Csv(csv::Error),
+
     /// Progress reporting or indicator errors
     Progress(String),
 
@@ -132,6 +135,7 @@ impl fmt::Display for AnalyzerError {
             AnalyzerError::TreeSitter(msg) => write!(f, "Tree-sitter parsing error: {msg}"),
             AnalyzerError::Json(err) => write!(f, "JSON error: {err}"),
             AnalyzerError::Walk(err) => write!(f, "Directory traversal error: {err}"),
+            AnalyzerError::Csv(err) => write!(f, "CSV error: {err}"),
             AnalyzerError::Progress(msg) => write!(f, "Progress reporting error: {msg}"),
             AnalyzerError::Validation(msg) => write!(f, "Validation error: {msg}"),
         }
@@ -144,6 +148,7 @@ impl std::error::Error for AnalyzerError {
             AnalyzerError::Io(err) => Some(err),
             AnalyzerError::Json(err) => Some(err),
             AnalyzerError::Walk(err) => Some(err),
+            AnalyzerError::Csv(err) => Some(err),
             _ => None,
         }
     }
@@ -165,6 +170,12 @@ impl From<serde_json::Error> for AnalyzerError {
 impl From<ignore::Error> for AnalyzerError {
     fn from(err: ignore::Error) -> Self {
         AnalyzerError::Walk(err)
+    }
+}
+
+impl From<csv::Error> for AnalyzerError {
+    fn from(err: csv::Error) -> Self {
+        AnalyzerError::Csv(err)
     }
 }
 

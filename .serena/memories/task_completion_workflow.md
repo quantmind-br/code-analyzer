@@ -2,28 +2,27 @@
 
 ## When Task is Completed - Required Checks
 
-### 1. Code Quality Verification
-Always run these commands after making changes:
+### 1. Code Quality Verification (MANDATORY)
+Use the Makefile for consistent quality checks:
 
 ```bash
-# Format check
-cargo fmt --check
+# Full quality check (REQUIRED before commit)
+make quality
 
-# Linting with strict warnings
-cargo clippy -- -D warnings
-
-# All tests must pass
-cargo test
+# Or run individually:
+cargo fmt --check          # Format check
+cargo clippy -- -D warnings # Linting with strict warnings
+cargo test                  # All tests must pass
 ```
 
 ### 2. Integration Testing
 Run the full test suite including integration tests:
 
 ```bash
-# Run all tests including integration
-cargo test
+# Run all tests
+make test
 
-# Specifically test CLI integration
+# Or specifically:
 cargo test --test integration_tests
 
 # Test with verbose output if needed
@@ -34,51 +33,57 @@ cargo test -- --nocapture
 Ensure the project builds in both modes:
 
 ```bash
-# Debug build
-cargo build
-
-# Release build (catches optimization issues)
-cargo build --release
+make build      # Debug build
+make release    # Release build (catches optimization issues)
 ```
 
 ### 4. Documentation Updates
 If public APIs changed:
 
 ```bash
-# Generate documentation
-cargo doc
-
-# Check for documentation warnings
-cargo doc --open
+cargo doc --open  # Generate and view documentation
 ```
 
 ## Development Workflow
 
 ### Before Starting Work
 1. `git status` - Check current state
-2. `cargo test` - Ensure tests pass
+2. `make test` - Ensure tests pass
 3. `git pull origin main` - Get latest changes
 
 ### During Development
-1. `cargo check` - Fast syntax validation
+1. `make check` - Fast syntax validation
 2. `cargo test --lib` - Quick library tests
-3. `cargo clippy` - Regular linting checks
+3. `make lint` - Regular linting checks
 
 ### Before Committing
-1. **MUST RUN**: `cargo fmt --check && cargo clippy -- -D warnings && cargo test`
+1. **MUST RUN**: `make quality` (runs fmt check + clippy + tests)
 2. If all pass, then commit
 3. Never commit if any of these fail
+
+## Makefile Targets Reference
+
+| Target | Command | Purpose |
+|--------|---------|---------|
+| `make build` | `cargo build` | Development build |
+| `make release` | `cargo build --release` | Optimized build |
+| `make test` | `cargo test` | Run all tests |
+| `make lint` | `cargo clippy -- -D warnings` | Strict linting |
+| `make fmt` | `cargo fmt` | Format code |
+| `make quality` | fmt + lint + test | Pre-commit check |
+| `make install` | Install to ~/.local/bin | Local installation |
+| `make clean` | `cargo clean` | Clean build artifacts |
 
 ## Common Issues & Solutions
 
 ### Tree-sitter Language Parsing
 - If new language support added, ensure grammar dependencies are in Cargo.toml
 - Test with sample files in `test_mixed_languages/`
+- TSX/JSX quirk: `&` must be escaped as `&amp;` before parsing
 
 ### Performance Testing
-- Use `--release` build for performance testing
+- Use `make release` for performance testing
 - Test with large codebases using `cargo run --release`
 
-### Windows Compatibility
-- Ensure path handling works with Windows paths (`\` vs `/`)
-- Test CLI commands with Windows command prompt
+### Known Technical Debt
+- `walker.rs` contains excessive `.unwrap()` calls - use `AnalyzerError` for new code

@@ -28,6 +28,7 @@ pub struct FileAnalysis {
     pub methods: usize,
     pub classes: usize,
     pub cyclomatic_complexity: usize,
+    pub max_nesting_depth: usize,
     pub complexity_score: f64,
 }
 
@@ -366,6 +367,13 @@ impl FileParser {
         // Calculate cyclomatic complexity (includes logical operators per McCabe)
         let cyclomatic_complexity = calculate_cyclomatic_complexity(&tree, &source_code, &language);
 
+        // Calculate max nesting depth
+        let max_nesting_depth = if let Some(ref tree) = tree {
+            calculate_max_nesting_depth(&tree.root_node(), language.nesting_node_kinds())
+        } else {
+            0
+        };
+
         let mut analysis = FileAnalysis {
             path: path.to_path_buf(),
             language: language.to_string(),
@@ -376,6 +384,7 @@ impl FileParser {
             methods,
             classes,
             cyclomatic_complexity,
+            max_nesting_depth,
             complexity_score: 0.0,
         };
 
@@ -958,6 +967,40 @@ fn count_methods(node: &Node, language: &SupportedLanguage) -> usize {
     count_nodes_iterative(node, |kind| language.is_method_node(kind))
 }
 
+fn calculate_max_nesting_depth(root: &Node, nesting_kinds: &[&str]) -> usize {
+    let mut max_depth = 0;
+    let mut cursor = root.walk();
+    let mut depth_stack: Vec<bool> = Vec::new();
+
+    loop {
+        let node = cursor.node();
+        let is_nesting = nesting_kinds.contains(&node.kind());
+
+        if is_nesting {
+            depth_stack.push(true);
+            let current_depth = depth_stack.iter().filter(|&&x| x).count();
+            max_depth = max_depth.max(current_depth);
+        }
+
+        if cursor.goto_first_child() {
+            if !is_nesting {
+                depth_stack.push(false);
+            }
+            continue;
+        }
+
+        loop {
+            if cursor.goto_next_sibling() {
+                break;
+            }
+            if !cursor.goto_parent() {
+                return max_depth;
+            }
+            depth_stack.pop();
+        }
+    }
+}
+
 /// Calculate cyclomatic complexity: 1 + number of decision points + logical operators
 ///
 /// This follows McCabe's original formula where compound predicates count each condition.
@@ -1150,6 +1193,7 @@ fn main() {
             methods: 3,
             classes: 2,
             cyclomatic_complexity: 10,
+            max_nesting_depth: 0,
             complexity_score: 0.0,
         };
 
@@ -1170,6 +1214,7 @@ fn main() {
                 methods: 2,
                 classes: 1,
                 cyclomatic_complexity: 5,
+                max_nesting_depth: 0,
                 complexity_score: 2.5,
             },
             FileAnalysis {
@@ -1182,6 +1227,7 @@ fn main() {
                 methods: 4,
                 classes: 2,
                 cyclomatic_complexity: 8,
+                max_nesting_depth: 0,
                 complexity_score: 4.0,
             },
         ];
@@ -1274,6 +1320,7 @@ export const X = React.forwardRef<
             methods: 2,
             classes: 1,
             cyclomatic_complexity: 5,
+            max_nesting_depth: 0,
             complexity_score: 2.5,
         };
 

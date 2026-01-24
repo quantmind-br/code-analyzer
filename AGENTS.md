@@ -1,143 +1,105 @@
-# Agent Instructions
+# CODE-ANALYZER KNOWLEDGE BASE
 
-## Issue Tracking with bd (beads)
+**Generated:** 2026-01-24
+**Commit:** 7d944b9
+**Branch:** main
 
-**IMPORTANT**: This project uses **bd (beads)** for ALL issue tracking. Do NOT use markdown TODOs, task lists, or other tracking methods.
+## OVERVIEW
 
-### Why bd?
+Rust CLI/library for identifying refactoring candidates via tree-sitter AST parsing. Supports 8 languages (Rust, JS, TS, Python, Java, C, C++, Go). Dual output: terminal tables + JSON.
 
-- Dependency-aware: Track blockers and relationships between issues
-- Git-friendly: Auto-syncs to JSONL for version control
-- Agent-optimized: JSON output, ready work detection, discovered-from links
-- Prevents duplicate tracking systems and confusion
+## STRUCTURE
 
-### Quick Start
+```
+code-analyzer/
+├── src/
+│   ├── main.rs           # CLI entry, CI mode handler
+│   ├── lib.rs            # Library API, orchestration
+│   ├── cli.rs            # clap derive args
+│   ├── error.rs          # AnalyzerError enum
+│   ├── analyzer/         # Core engine (see analyzer/AGENTS.md)
+│   └── output/           # Terminal + JSON formatters
+├── tests/                # Integration tests
+└── history/              # Legacy planning docs
+```
 
-**Check for ready work:**
+## WHERE TO LOOK
+
+| Task | Location | Notes |
+|------|----------|-------|
+| Add language support | `src/analyzer/language.rs` | Add grammar to Cargo.toml too |
+| Modify complexity calc | `src/analyzer/parser.rs:971` | `calculate_cyclomatic_complexity` |
+| Add CLI flag | `src/cli.rs` | clap derive, add to CliArgs |
+| Change table output | `src/output/terminal.rs` | prettytable-rs |
+| Change JSON schema | `src/output/json.rs` | Update serde structs |
+| Add new metric | `src/analyzer/parser.rs` | Update FileAnalysis struct |
+| Fix file traversal | `src/analyzer/walker.rs` | Uses `ignore` crate |
+
+## CODE MAP
+
+| Symbol | Type | Location | Role |
+|--------|------|----------|------|
+| `AnalyzerEngine` | struct | `analyzer/mod.rs` | Main orchestrator |
+| `run_analysis` | fn | `lib.rs:82` | Entry point for programmatic use |
+| `FileParser` | struct | `analyzer/parser.rs` | AST parsing per file |
+| `LanguageManager` | struct | `analyzer/language.rs` | Grammar loading, lang detection |
+| `FileWalker` | struct | `analyzer/walker.rs` | Parallel file discovery |
+| `OutputManager` | struct | `output/mod.rs` | Routes terminal/JSON output |
+| `CliArgs` | struct | `cli.rs` | All CLI flags |
+| `AnalyzerError` | enum | `error.rs` | Central error type |
+
+## CONVENTIONS
+
+### Quality Gates (MANDATORY before commit)
 ```bash
-bd ready --json
+make quality  # or: cargo fmt --check && cargo clippy -- -D warnings && cargo test
 ```
 
-**Create new issues:**
-```bash
-bd create "Issue title" -t bug|feature|task -p 0-4 --json
-bd create "Issue title" -p 1 --deps discovered-from:bd-123 --json
-bd create "Subtask" --parent <epic-id> --json  # Hierarchical subtask (gets ID like epic-id.1)
-```
+### CLI Design
+- All output commands MUST support `--json` flag
+- CI mode: `--ci` exits 2 if candidates exceed `--ci-max-candidates`
 
-**Claim and update:**
-```bash
-bd update bd-42 --status in_progress --json
-bd update bd-42 --priority 1 --json
-```
+### Testing
+- Unit tests: co-located in `mod tests` blocks
+- Integration: `tests/integration_tests.rs`
+- Use `tempfile` crate for ephemeral test projects
 
-**Complete work:**
-```bash
-bd close bd-42 --reason "Completed" --json
-```
+## ANTI-PATTERNS
 
-### Issue Types
+| Pattern | Why Forbidden |
+|---------|---------------|
+| Skip `make quality` | Zero tolerance for warnings |
+| Excessive `.unwrap()` | Use `AnalyzerError`. Known debt in walker.rs |
 
-- `bug` - Something broken
-- `feature` - New functionality
-- `task` - Work item (tests, docs, refactoring)
-- `epic` - Large feature with subtasks
-- `chore` - Maintenance (dependencies, tooling)
+## UNIQUE STYLES
 
-### Priorities
+- **Thin binary**: `main.rs` is ~80 lines. All logic in `lib.rs`.
+- **Traditional mod.rs**: Uses `analyzer/mod.rs` pattern (not modern Rust 2018 style).
+- **TSX parsing quirk**: JSX text requires `&` → `&amp;` before parsing. See `escape_ampersands_in_jsx_text`.
 
-- `0` - Critical (security, data loss, broken builds)
-- `1` - High (major features, important bugs)
-- `2` - Medium (default, nice-to-have)
-- `3` - Low (polish, optimization)
-- `4` - Backlog (future ideas)
-
-### Workflow for AI Agents
-
-1. **Check ready work**: `bd ready` shows unblocked issues
-2. **Claim your task**: `bd update <id> --status in_progress`
-3. **Work on it**: Implement, test, document
-4. **Discover new work?** Create linked issue:
-   - `bd create "Found bug" -p 1 --deps discovered-from:<parent-id>`
-5. **Complete**: `bd close <id> --reason "Done"`
-6. **Commit together**: Always commit the `.beads/issues.jsonl` file together with the code changes so issue state stays in sync with code state
-
-### Auto-Sync
-
-bd automatically syncs with git:
-- Exports to `.beads/issues.jsonl` after changes (5s debounce)
-- Imports from JSONL when newer (e.g., after `git pull`)
-- No manual export/import needed!
-
-### GitHub Copilot Integration
-
-If using GitHub Copilot, also create `.github/copilot-instructions.md` for automatic instruction loading.
-Run `bd onboard` to get the content, or see step 2 of the onboard instructions.
-
-### MCP Server (Recommended)
-
-If using Claude or MCP-compatible clients, install the beads MCP server:
+## COMMANDS
 
 ```bash
-pip install beads-mcp
+# Development
+make build              # cargo build
+make release            # cargo build --release
+make test               # cargo test
+make lint               # cargo clippy -- -D warnings
+make quality            # fmt + lint + test (pre-commit)
+
+# Install
+make install            # → ~/.local/bin/code-analyzer
+
+# Run
+code-analyzer .                    # analyze current dir
+code-analyzer --output json        # JSON only
+code-analyzer --ci --ci-max-candidates 5  # CI mode
 ```
 
-Add to MCP config (e.g., `~/.config/claude/config.json`):
-```json
-{
-  "beads": {
-    "command": "beads-mcp",
-    "args": []
-  }
-}
-```
+## NOTES
 
-Then use `mcp__beads__*` functions instead of CLI commands.
-
-### Managing AI-Generated Planning Documents
-
-AI assistants often create planning and design documents during development:
-- PLAN.md, IMPLEMENTATION.md, ARCHITECTURE.md
-- DESIGN.md, CODEBASE_SUMMARY.md, INTEGRATION_PLAN.md
-- TESTING_GUIDE.md, TECHNICAL_DESIGN.md, and similar files
-
-**Best Practice: Use a dedicated directory for these ephemeral files**
-
-**Recommended approach:**
-- Create a `history/` directory in the project root
-- Store ALL AI-generated planning/design docs in `history/`
-- Keep the repository root clean and focused on permanent project files
-- Only access `history/` when explicitly asked to review past planning
-
-**Example .gitignore entry (optional):**
-```
-# AI planning documents (ephemeral)
-history/
-```
-
-**Benefits:**
-- Clean repository root
-- Clear separation between ephemeral and permanent documentation
-- Easy to exclude from version control if desired
-- Preserves planning history for archeological research
-- Reduces noise when browsing the project
-
-### CLI Help
-
-Run `bd <command> --help` to see all available flags for any command.
-For example: `bd create --help` shows `--parent`, `--deps`, `--assignee`, etc.
-
-### Important Rules
-
-- Use bd for ALL task tracking
-- Always use `--json` flag for programmatic use
-- Link discovered work with `discovered-from` dependencies
-- Check `bd ready` before asking "what should I work on?"
-- Store AI planning docs in `history/` directory
-- Run `bd <cmd> --help` to discover available flags
-- Do NOT create markdown TODO lists
-- Do NOT use external issue trackers
-- Do NOT duplicate tracking systems
-- Do NOT clutter repo root with planning documents
-
-For more details, see README.md and QUICKSTART.md.
+- **Exit codes**: 0=success, 1=error, 2=CI threshold exceeded
+- **Parallelism**: Uses rayon for file analysis. Thread-local parsers.
+- **Progress**: `--verbose` shows indicatif progress bar
+- **File size limit**: Default 10MB, configurable via `--max-file-size-mb`
+- **Complexity hotspot**: `src/analyzer/parser.rs` (1370 lines) - consider splitting

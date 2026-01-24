@@ -134,6 +134,9 @@ pub trait NodeKindMapper {
 
     /// Get the logical operators for this language
     fn logical_operators(&self) -> &[&str];
+
+    /// Get node kinds that contribute to nesting depth (for max nesting metric)
+    fn nesting_node_kinds(&self) -> &'static [&'static str];
 }
 
 impl NodeKindMapper for SupportedLanguage {
@@ -347,6 +350,62 @@ impl NodeKindMapper for SupportedLanguage {
             SupportedLanguage::Python => &[],
             // All C-like languages use && and ||
             _ => &["&&", "||"],
+        }
+    }
+
+    fn nesting_node_kinds(&self) -> &'static [&'static str] {
+        match self {
+            SupportedLanguage::Rust => &[
+                "if_expression",
+                "match_expression",
+                "for_expression",
+                "while_expression",
+                "loop_expression",
+            ],
+            SupportedLanguage::JavaScript => &[
+                "if_statement",
+                "for_statement",
+                "while_statement",
+                "do_statement",
+                "switch_statement",
+                "try_statement",
+            ],
+            SupportedLanguage::TypeScript | SupportedLanguage::Tsx => &[
+                "if_statement",
+                "for_statement",
+                "while_statement",
+                "do_statement",
+                "switch_statement",
+                "try_statement",
+            ],
+            SupportedLanguage::Python => &[
+                "if_statement",
+                "for_statement",
+                "while_statement",
+                "try_statement",
+                "with_statement",
+            ],
+            SupportedLanguage::Java => &[
+                "if_statement",
+                "for_statement",
+                "while_statement",
+                "do_statement",
+                "switch_expression",
+                "try_statement",
+            ],
+            SupportedLanguage::C | SupportedLanguage::Cpp => &[
+                "if_statement",
+                "for_statement",
+                "while_statement",
+                "do_statement",
+                "switch_statement",
+            ],
+            SupportedLanguage::Go => &[
+                "if_statement",
+                "for_statement",
+                "switch_statement",
+                "select_statement",
+            ],
         }
     }
 }

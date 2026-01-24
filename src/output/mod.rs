@@ -4,9 +4,11 @@ use crate::analyzer::{AnalysisReport, FileAnalysis, ProjectSummary, RefactoringT
 use crate::cli::{CliArgs, OutputFormat, SortBy};
 use crate::error::{AnalyzerError, Result};
 
+pub mod csv;
 pub mod json;
 pub mod terminal;
 
+pub use csv::CsvExporter;
 pub use json::{export_analysis_results, export_compact_json, JsonExporter};
 pub use terminal::{apply_sorting, create_simple_table, display_compact_table, TerminalReporter};
 
@@ -87,6 +89,17 @@ impl OutputManager {
                     .export_summary_only(&report.summary, &path)?;
                 if args.verbose {
                     println!("Summary-only JSON written to: {}", path.display());
+                }
+            }
+            OutputFormat::Csv => {
+                let csv_exporter = CsvExporter::new();
+                if let Some(ref path) = args.output_file {
+                    csv_exporter.export_to_file(&report.files, path)?;
+                    if args.verbose {
+                        println!("CSV report saved to: {}", path.display());
+                    }
+                } else {
+                    csv_exporter.export_to_stdout(&report.files)?;
                 }
             }
         }
@@ -335,6 +348,14 @@ pub fn route_output_by_format(
                 Ok(())
             }
         }
+        OutputFormat::Csv => {
+            let csv_exporter = CsvExporter::new();
+            if let Some(path) = json_path {
+                csv_exporter.export_to_file(&report.files, path)
+            } else {
+                csv_exporter.export_to_stdout(&report.files)
+            }
+        }
     }
 }
 
@@ -358,6 +379,7 @@ mod tests {
                 methods: 3,
                 classes: 2,
                 cyclomatic_complexity: 8,
+                max_nesting_depth: 0,
                 complexity_score: 3.2,
             },
             crate::analyzer::FileAnalysis {
@@ -370,6 +392,7 @@ mod tests {
                 methods: 2,
                 classes: 1,
                 cyclomatic_complexity: 5,
+                max_nesting_depth: 0,
                 complexity_score: 2.1,
             },
         ];

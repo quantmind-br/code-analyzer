@@ -184,6 +184,8 @@ pub enum SortBy {
     Lines,
     /// Sort by number of functions (descending)
     Functions,
+    /// Sort by number of methods (descending)
+    Methods,
     /// Sort by number of classes (descending)
     Classes,
     /// Sort by file name (ascending)
@@ -200,6 +202,7 @@ impl std::fmt::Display for SortBy {
             SortBy::Lines => write!(f, "lines"),
             SortBy::Functions => write!(f, "functions"),
             SortBy::Classes => write!(f, "classes"),
+            SortBy::Methods => write!(f, "methods"),
             SortBy::Name => write!(f, "name"),
             SortBy::Path => write!(f, "path"),
             SortBy::Complexity => write!(f, "complexity"),
@@ -222,6 +225,9 @@ pub enum OutputFormat {
     /// JSON with only project summary (no individual files)
     #[value(name = "json-summary-only")]
     JsonSummaryOnly,
+    /// CSV output format
+    #[value(name = "csv")]
+    Csv,
 }
 
 impl std::fmt::Display for OutputFormat {
@@ -232,6 +238,7 @@ impl std::fmt::Display for OutputFormat {
             OutputFormat::Both => write!(f, "both"),
             OutputFormat::JsonFilesOnly => write!(f, "json-files-only"),
             OutputFormat::JsonSummaryOnly => write!(f, "json-summary-only"),
+            OutputFormat::Csv => write!(f, "csv"),
         }
     }
 }
@@ -244,12 +251,7 @@ impl CliArgs {
             if !path.exists() {
                 return Err(crate::error::AnalyzerError::invalid_path(path));
             }
-            if !path.is_dir() {
-                return Err(crate::error::AnalyzerError::validation_error(format!(
-                    "Path must be a directory: {}",
-                    path.display()
-                )));
-            }
+            // Allow both files and directories - walker.rs handles both
         }
 
         // Validate min/max lines constraints
@@ -460,8 +462,8 @@ mod tests {
     }
 
     #[test]
-    fn test_validate_file_instead_of_directory() {
-        // Create a temporary file
+    fn test_validate_file_path_is_allowed() {
+        // Create a temporary file - files are now allowed (single file analysis)
         let temp_file = std::env::temp_dir().join("test_file.txt");
         std::fs::write(&temp_file, "test").unwrap();
 
@@ -470,11 +472,8 @@ mod tests {
             ..Default::default()
         };
         let result = args.validate();
-        assert!(result.is_err());
-        assert!(result
-            .unwrap_err()
-            .to_string()
-            .contains("must be a directory"));
+        // Files are now allowed - validation should pass
+        assert!(result.is_ok());
 
         // Cleanup
         let _ = std::fs::remove_file(temp_file);

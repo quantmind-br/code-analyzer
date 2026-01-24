@@ -475,6 +475,9 @@ pub fn apply_sorting(files: &mut [FileAnalysis], sort_by: SortBy) {
         SortBy::Functions => {
             files.sort_by_key(|f| std::cmp::Reverse(f.functions));
         }
+        SortBy::Methods => {
+            files.sort_by_key(|f| std::cmp::Reverse(f.methods));
+        }
         SortBy::Classes => {
             files.sort_by_key(|f| std::cmp::Reverse(f.classes));
         }
@@ -589,6 +592,7 @@ mod tests {
                 methods: 4,
                 classes: 2,
                 cyclomatic_complexity: 12,
+                max_nesting_depth: 0,
                 complexity_score: 3.5,
             },
             FileAnalysis {
@@ -601,6 +605,7 @@ mod tests {
                 methods: 3,
                 classes: 1,
                 cyclomatic_complexity: 6,
+                max_nesting_depth: 0,
                 complexity_score: 2.1,
             },
             FileAnalysis {
@@ -613,6 +618,7 @@ mod tests {
                 methods: 8,
                 classes: 3,
                 cyclomatic_complexity: 18,
+                max_nesting_depth: 0,
                 complexity_score: 4.8,
             },
         ]

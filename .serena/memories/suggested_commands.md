@@ -1,88 +1,90 @@
 # Suggested Commands - Code Analyzer
 
-## Development Commands
+## Makefile Commands (Preferred)
+
+### Development Workflow
+```bash
+make build      # Development build
+make release    # Optimized release build
+make test       # Run all tests
+make lint       # Run clippy with -D warnings
+make fmt        # Format code
+make quality    # Full quality check (fmt + lint + test)
+make install    # Install to ~/.local/bin
+make clean      # Clean build artifacts
+make help       # Show all available targets
+```
+
+## Cargo Commands (Direct)
 
 ### Building & Installation
 ```bash
-# Development build
-cargo build
-
-# Release build (optimized)
-cargo build --release
-
-# Install locally from source
-cargo install --path .
+cargo build              # Development build
+cargo build --release    # Release build (optimized)
+cargo install --path .   # Install locally from source
 ```
 
 ### Testing
 ```bash
-# Run all tests
-cargo test
-
-# Run integration tests only
-cargo test --test integration_tests
-
-# Run with verbose output
-cargo test -- --nocapture
-
-# Run specific test module
-cargo test --test integration_tests -- language_detection
+cargo test                              # Run all tests
+cargo test --test integration_tests     # Integration tests only
+cargo test -- --nocapture               # With verbose output
+cargo test --lib                        # Library tests only
 ```
 
 ### Code Quality
 ```bash
-# Format code
-cargo fmt
-
-# Check formatting without making changes
-cargo fmt --check
-
-# Run clippy linter
-cargo clippy
-
-# Clippy with all warnings as errors (CI mode)
-cargo clippy -- -D warnings
-
-# Full quality check (suitable for CI)
-cargo fmt --check && cargo clippy -- -D warnings && cargo test
+cargo fmt                  # Format code
+cargo fmt --check          # Check formatting without changes
+cargo clippy               # Run clippy linter
+cargo clippy -- -D warnings # Clippy with all warnings as errors
 ```
 
-### Running the Tool
+## Running the Tool
+
+### Basic Usage
 ```bash
-# Basic analysis of current directory
-cargo run
-
-# Analyze specific directory
-cargo run /path/to/project
-
-# With filters and options
-cargo run -- --min-lines 100 --sort complexity --output json
-
-# Using installed binary
-code-analyzer --help
-code-analyzer --min-functions 5 --languages rust,python
+code-analyzer .                    # Analyze current directory
+code-analyzer /path/to/project     # Analyze specific directory
+code-analyzer --verbose            # With progress bar
 ```
 
-## Windows-Specific Commands
-
-### System Commands
-- `dir` - List directory contents (instead of `ls`)
-- `type file.txt` - Display file contents (instead of `cat`)
-- `findstr "pattern" *.rs` - Search in files (instead of `grep`)
-- `where code-analyzer` - Find executable location (instead of `which`)
-
-### Git Operations
+### Filtering Options
 ```bash
-git status
-git add .
-git commit -m "message"
-git push origin main
+code-analyzer --min-lines 100              # Files with 100+ lines
+code-analyzer --min-functions 5            # Files with 5+ functions
+code-analyzer --languages rust,python      # Specific languages only
+code-analyzer --exclude "*.test.js"        # Exclude patterns
 ```
 
-## Cargo Shortcuts
+### Output Options
 ```bash
-# Quick development cycle
-cargo check          # Fast syntax check
-cargo test --lib      # Test library code only
-cargo doc --open      # Generate and open documentation
+code-analyzer --output json                # JSON output only
+code-analyzer --output both                # Terminal + JSON
+code-analyzer --output-file report.json    # Custom output file
+code-analyzer --compact                    # Minimal CI/CD output
+code-analyzer --sort complexity            # Sort by complexity
+code-analyzer --limit 20                   # Top 20 results
+```
+
+### CI Mode
+```bash
+code-analyzer --ci                         # CI mode (exit 2 if issues)
+code-analyzer --ci --ci-max-candidates 5   # Allow up to 5 candidates
+code-analyzer --only-changed-since HEAD~1  # Only changed files
+```
+
+### Threshold Configuration
+```bash
+code-analyzer --max-complexity-score 10.0  # Complexity threshold
+code-analyzer --max-cc 15                  # Cyclomatic complexity
+code-analyzer --max-loc 500                # Lines of code threshold
+code-analyzer --max-functions-per-file 25  # Functions per file
+```
+
+## Quick Development Cycle
+```bash
+make check       # Fast syntax check (cargo check)
+make test        # Run tests
+make quality     # Full pre-commit check
 ```

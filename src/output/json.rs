@@ -272,6 +272,7 @@ mod tests {
                 methods: 3,
                 classes: 2,
                 cyclomatic_complexity: 8,
+                max_nesting_depth: 0,
                 complexity_score: 3.2,
             },
             FileAnalysis {
@@ -284,6 +285,7 @@ mod tests {
                 methods: 2,
                 classes: 1,
                 cyclomatic_complexity: 5,
+                max_nesting_depth: 0,
                 complexity_score: 2.1,
             },
         ];

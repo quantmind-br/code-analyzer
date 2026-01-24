@@ -10,13 +10,19 @@
 - **clap 4.0**: Command-line argument parsing with derive API
 - **prettytable-rs 0.10**: Terminal table formatting
 - **indicatif 0.17**: Progress bars and spinners
+- **atty 0.2**: TTY detection for color output
 
 ### AST Parsing & Language Support
-- **tree-sitter 0.20**: Core AST parsing engine
+- **tree-sitter 0.26**: Core AST parsing engine
 - **Language Grammars**: Individual tree-sitter parsers for:
-  - tree-sitter-rust, tree-sitter-javascript, tree-sitter-python
-  - tree-sitter-java, tree-sitter-c, tree-sitter-cpp
-  - tree-sitter-go, tree-sitter-typescript
+  - tree-sitter-rust 0.24
+  - tree-sitter-javascript 0.25
+  - tree-sitter-python 0.25
+  - tree-sitter-java 0.23
+  - tree-sitter-c 0.24
+  - tree-sitter-cpp 0.23
+  - tree-sitter-go 0.25
+  - tree-sitter-typescript 0.23
 
 ### File System & Data Processing
 - **ignore 0.4**: Directory traversal with gitignore support
@@ -33,9 +39,8 @@
 - **Default**: `full-analysis` feature enabled
 - **Release Profile**: LTO optimization, single codegen unit, abort on panic
 
-## Architecture Pattern
-- Modular design with clear separation:
-  - `analyzer/` - Core analysis engine with language detection, parsing, and walking
-  - `output/` - Dual output system (terminal + JSON)
-  - `cli.rs` - Command-line interface and argument handling
-  - `error.rs` - Centralized error handling
+## Architecture Patterns
+- **Thin binary**: main.rs is ~80 lines, all logic in lib.rs
+- **Traditional mod.rs**: Uses analyzer/mod.rs pattern
+- **Thread-local parsers**: For safe parallel processing with rayon
+- **Dual crate**: Both library and binary in one package
