@@ -1,7 +1,8 @@
 # Code Analyzer
 
 [![Rust](https://img.shields.io/badge/rust-1.70+-orange.svg)](https://www.rust-lang.org/)
-[![License](https://img.shields.io/badge/license-MIT%2FApache--2.0-blue.svg)](LICENSE)
+[![CI](https://github.com/quantmind-br/code-analyzer/actions/workflows/ci.yml/badge.svg)](https://github.com/quantmind-br/code-analyzer/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-yellow.svg)](LICENSE)
 
 Uma ferramenta CLI poderosa para analisar bases de código e identificar candidatos a refatoração usando análise AST (Abstract Syntax Tree). Desenvolva código mais limpo e mantenha a qualidade técnica do seu projeto com métricas precisas e relatórios detalhados.
 
@@ -38,7 +39,7 @@ Uma ferramenta CLI poderosa para analisar bases de código e identificar candida
 ### Instalação via Cargo (Recomendado)
 ```bash
 # Clone o repositório
-git clone https://github.com/example/code-analyzer.git
+git clone https://github.com/quantmind-br/code-analyzer.git
 cd code-analyzer
 
 # Instale localmente
@@ -53,7 +54,7 @@ cargo install code-analyzer
 ### Build Manual
 ```bash
 # Clone e compile
-git clone https://github.com/example/code-analyzer.git
+git clone https://github.com/quantmind-br/code-analyzer.git
 cd code-analyzer
 cargo build --release
 
